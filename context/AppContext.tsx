@@ -9,6 +9,8 @@ interface AppContextType {
   updateJob: (job: Job) => void;
   deleteJob: (id: string) => void;
   addInstaller: (installer: Installer) => void;
+  updateInstaller: (installer: Installer) => void;
+  deleteInstaller: (id: string) => void;
   getInstallerName: (id: string) => string;
 }
 
@@ -51,6 +53,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setInstallers(prev => [...prev, installer]);
   };
 
+  const updateInstaller = (updatedInstaller: Installer) => {
+    setInstallers(prev => prev.map(i => i.id === updatedInstaller.id ? updatedInstaller : i));
+  };
+
+  const deleteInstaller = (id: string) => {
+    setInstallers(prev => prev.filter(i => i.id !== id));
+  };
+
   const getInstallerName = (id: string) => {
     const inst = installers.find(i => i.id === id);
     return inst ? inst.name : 'Desconhecido';
@@ -64,6 +74,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       updateJob,
       deleteJob,
       addInstaller,
+      updateInstaller,
+      deleteInstaller,
       getInstallerName
     }}>
       {children}

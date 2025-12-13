@@ -1,14 +1,9 @@
-
-
 {
   "name": "gestor-de-obras-pro",
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://fernandescalebe10-ui.github.io/obras-pro/",
-  "scripts": {  
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist",
+  "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"

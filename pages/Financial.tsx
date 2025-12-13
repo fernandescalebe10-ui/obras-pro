@@ -1,11 +1,12 @@
+
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { PaymentStatus } from '../types';
+import { PaymentStatus, Job } from '../types';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
-import { Download, TrendingUp, AlertTriangle, Calendar } from 'lucide-react';
+import { Download, TrendingUp, AlertTriangle, Calendar, Printer, FileText, Share } from 'lucide-react';
 
 const Financial: React.FC = () => {
-  const { jobs, installers } = useApp();
+  const { jobs, installers, getInstallerName } = useApp();
   const [filterInstaller, setFilterInstaller] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   
@@ -19,7 +20,6 @@ const Financial: React.FC = () => {
     setSelectedMonth(val);
     if (val) {
       const [year, month] = val.split('-').map(Number);
-      // Create date without timezone issues for month start
       const date = new Date(year, month - 1, 1);
       setStartDate(format(startOfMonth(date), 'yyyy-MM-dd'));
       setEndDate(format(endOfMonth(date), 'yyyy-MM-dd'));
@@ -32,8 +32,6 @@ const Financial: React.FC = () => {
   const handleDateChange = (type: 'start' | 'end', value: string) => {
     if (type === 'start') setStartDate(value);
     else setEndDate(value);
-    
-    // Clear month selection if manual dates don't match a full month (simplified: just clear it to indicate custom range)
     setSelectedMonth('');
   };
 
@@ -44,12 +42,10 @@ const Financial: React.FC = () => {
                         (filterStatus === 'paid' && job.paymentStatus === PaymentStatus.PAID) ||
                         (filterStatus === 'pending' && job.paymentStatus === PaymentStatus.PENDING);
     
-    // Date Filtering
     const jobDate = new Date(job.date);
     const start = startDate ? new Date(startDate) : null;
     const end = endDate ? new Date(endDate) : null;
     
-    // Adjust time for inclusive comparison
     if (start) start.setHours(0, 0, 0, 0);
     if (end) end.setHours(23, 59, 59, 999);
 
@@ -61,12 +57,33 @@ const Financial: React.FC = () => {
   const totalPaid = filteredJobs.filter(j => j.paymentStatus === PaymentStatus.PAID).reduce((acc, j) => acc + j.value, 0);
   const totalPending = filteredJobs.filter(j => j.paymentStatus !== PaymentStatus.PAID).reduce((acc, j) => acc + j.value, 0);
 
+  const handlePrint = () => {
+    window.print();
+  };
+
+  // Specific view for filtered installer report
+  const isInstallerReport = filterInstaller !== 'all';
+
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-800">Controle Financeiro</h2>
+      {/* Hide controls when printing */}
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          .print-only { display: block !important; }
+          body { background-color: white; }
+          .page-break { page-break-before: always; }
+          /* Ensure backgrounds print */
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        }
+      `}</style>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="flex justify-between items-center no-print">
+        <h2 className="text-2xl font-bold text-gray-800">Controle Financeiro</h2>
+      </div>
+
+      {/* Summary Cards (Hidden on print if you only want the list, but usually good to keep) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 no-print">
         <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
            <div className="flex items-center justify-between">
              <div>
@@ -92,14 +109,13 @@ const Financial: React.FC = () => {
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-6 rounded-lg shadow-sm">
+      <div className="bg-white p-6 rounded-lg shadow-sm no-print">
         <div className="flex items-center gap-2 mb-4 text-gray-700 font-medium border-b pb-2">
            <Calendar size={20} className="text-primary"/>
-           Filtros de Período e Categoria
+           Filtros & Relatórios
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 items-end">
-          {/* Month Quick Select */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 items-end">
           <div className="w-full">
             <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase">Mês de Referência</label>
             <input 
@@ -110,7 +126,6 @@ const Financial: React.FC = () => {
             />
           </div>
 
-          {/* Start Date */}
           <div className="w-full">
             <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase">Data Início</label>
             <input 
@@ -121,7 +136,6 @@ const Financial: React.FC = () => {
             />
           </div>
 
-          {/* End Date */}
           <div className="w-full">
             <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase">Data Fim</label>
             <input 
@@ -132,7 +146,6 @@ const Financial: React.FC = () => {
             />
           </div>
 
-          {/* Installer */}
           <div className="w-full">
             <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase">Instalador</label>
             <select 
@@ -145,7 +158,6 @@ const Financial: React.FC = () => {
             </select>
           </div>
 
-          {/* Status */}
           <div className="w-full">
             <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase">Status Pagamento</label>
             <select 
@@ -159,59 +171,148 @@ const Financial: React.FC = () => {
               <option value="late">Atrasados</option>
             </select>
           </div>
-
-          {/* Export Button */}
-          <button className="flex items-center justify-center px-4 py-2 bg-slate-800 text-white rounded-md hover:bg-slate-900 transition-colors text-sm font-medium h-[38px]">
-            <Download size={16} className="mr-2" />
-            Exportar
-          </button>
         </div>
+
+        {/* Action Button Area within Filters */}
+        {isInstallerReport && (
+          <div className="mt-6 pt-4 border-t border-gray-100 flex flex-col sm:flex-row justify-end items-center gap-4 bg-gray-50 p-4 rounded-lg">
+            <div className="text-sm text-gray-500 mr-auto">
+              <span className="font-semibold">{filteredJobs.length}</span> obras encontradas para <span className="font-semibold">{getInstallerName(filterInstaller)}</span>
+            </div>
+            <button 
+              onClick={handlePrint}
+              className="w-full sm:w-auto flex items-center justify-center px-6 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors shadow-sm font-semibold"
+            >
+              <FileText size={18} className="mr-2" />
+              Exportar Relatório PDF
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Table */}
-      <div className="bg-white shadow overflow-hidden rounded-lg">
+      {/* Report Header (Print Only) */}
+      {isInstallerReport && (
+        <div className="hidden print-only mb-6">
+          <div className="text-center border-b pb-4 mb-4">
+            <h1 className="text-2xl font-bold uppercase">Relatório de Produção</h1>
+            <p className="text-gray-600">
+              Instalador: <span className="font-bold">{getInstallerName(filterInstaller)}</span>
+            </p>
+            <p className="text-sm text-gray-500">
+              Período: {format(new Date(startDate), 'dd/MM/yyyy')} a {format(new Date(endDate), 'dd/MM/yyyy')}
+            </p>
+          </div>
+          <div className="flex justify-between mb-4 bg-gray-50 p-4 rounded border">
+             <div>
+                <span className="block text-sm text-gray-500">Obras Realizadas</span>
+                <span className="font-bold text-lg">{filteredJobs.length}</span>
+             </div>
+             <div>
+                <span className="block text-sm text-gray-500">Valor Total</span>
+                <span className="font-bold text-lg">R$ {(totalPaid + totalPending).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Table */}
+      <div className="bg-white shadow overflow-hidden rounded-lg border border-gray-200">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente / Pedido</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Instalador</th>
+              {!isInstallerReport && <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Instalador</th>}
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Detalhes Serviços</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+              {!isInstallerReport && <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider no-print">Status</th>}
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {filteredJobs.length === 0 ? (
-              <tr><td colSpan={5} className="px-6 py-10 text-center text-gray-500">Nenhum registro encontrado para os filtros selecionados.</td></tr>
+              <tr><td colSpan={6} className="px-6 py-10 text-center text-gray-500">Nenhum registro encontrado.</td></tr>
             ) : (
               filteredJobs.map((job) => (
-                <tr key={job.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <tr key={job.id} className="hover:bg-gray-50 break-inside-avoid">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 align-top">
                     {format(new Date(job.date), 'dd/MM/yyyy')}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{job.clientName}</div>
-                    <div className="text-sm text-gray-500">{job.orderNumber}</div>
+                  <td className="px-6 py-4 whitespace-nowrap align-top">
+                    <div className="text-sm font-bold text-gray-900">{job.clientName}</div>
+                    <div className="text-xs text-gray-500">Ped: {job.orderNumber}</div>
+                    {job.description && (
+                       <div className="text-xs text-gray-400 mt-1 italic max-w-[150px] truncate">{job.description}</div>
+                    )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {installers.find(i => i.id === job.installerId)?.name || 'N/A'}
+                  {!isInstallerReport && (
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 align-top">
+                      {getInstallerName(job.installerId)}
+                    </td>
+                  )}
+                  {/* Service Details Column */}
+                  <td className="px-6 py-4 text-xs text-gray-600 align-top">
+                     {job.items && job.items.some(i => i.quantity > 0) ? (
+                       <ul className="list-disc pl-4 space-y-1">
+                         {job.items.filter(i => i.quantity > 0).map((item, idx) => (
+                           <li key={idx}>
+                             <span className="font-medium">{item.name}:</span> {item.quantity} un/m x R$ {item.pricePerUnit} = <b>R$ {item.total}</b>
+                           </li>
+                         ))}
+                       </ul>
+                     ) : (
+                       <span className="italic text-gray-400">Sem itens detalhados</span>
+                     )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-bold align-top">
                     R$ {job.value.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                        ${job.paymentStatus === PaymentStatus.PAID ? 'bg-green-100 text-green-800' : 
-                          job.paymentStatus === PaymentStatus.LATE ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                      {job.paymentStatus}
-                    </span>
-                  </td>
+                  {!isInstallerReport && (
+                    <td className="px-6 py-4 whitespace-nowrap align-top no-print">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                          ${job.paymentStatus === PaymentStatus.PAID ? 'bg-green-100 text-green-800' : 
+                            job.paymentStatus === PaymentStatus.LATE ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                        {job.paymentStatus}
+                      </span>
+                    </td>
+                  )}
                 </tr>
               ))
             )}
           </tbody>
+          {/* Footer for Report */}
+          {isInstallerReport && filteredJobs.length > 0 && (
+             <tfoot className="bg-gray-100 font-bold border-t-2 border-gray-300">
+                <tr>
+                   <td colSpan={2} className="px-6 py-4 text-right text-gray-700">TOTAIS DO PERÍODO:</td>
+                   <td className="px-6 py-4 text-left">
+                      {filteredJobs.length} obras
+                   </td>
+                   <td className="px-6 py-4 text-left text-xl text-primary">
+                      R$ {filteredJobs.reduce((acc, j) => acc + j.value, 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                   </td>
+                </tr>
+             </tfoot>
+          )}
         </table>
       </div>
+      
+      {/* Signature Section (Print Only) */}
+      {isInstallerReport && (
+        <div className="hidden print-only mt-12 pt-8 border-t border-gray-300">
+           <div className="flex justify-between px-12">
+              <div className="text-center">
+                 <div className="w-64 border-t border-black mb-2"></div>
+                 <p>{getInstallerName(filterInstaller)}</p>
+                 <p className="text-xs text-gray-500">Assinatura do Instalador</p>
+              </div>
+              <div className="text-center">
+                 <div className="w-64 border-t border-black mb-2"></div>
+                 <p>Gestor Responsável</p>
+                 <p className="text-xs text-gray-500">Assinatura da Empresa</p>
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -48,8 +48,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         `}
       >
         <div className="flex items-center justify-between h-16 px-6 bg-slate-800 border-b border-slate-700">
-          <span className="text-xl font-bold tracking-wider text-white">Gestor<span className="text-primary">PRO</span></span>
-          <button onClick={toggleSidebar} className="lg:hidden text-gray-300 hover:text-white">
+          <div className="flex items-center justify-center w-full lg:justify-start">
+            <div className="flex items-baseline">
+              <span className="text-3xl font-extrabold text-blue-500 tracking-tight">Granpiso</span>
+              <span className="text-lg font-bold text-red-500 ml-1">Obras</span>
+            </div>
+          </div>
+          <button onClick={toggleSidebar} className="lg:hidden text-gray-300 hover:text-white ml-2">
             <X size={24} />
           </button>
         </div>
@@ -82,7 +87,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             Sair do Sistema
           </button>
           <div className="mt-4 px-4 text-xs text-slate-500">
-            v1.0.0
+            v1.0.1
           </div>
         </div>
       </aside>

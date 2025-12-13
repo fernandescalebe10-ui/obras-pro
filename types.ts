@@ -1,3 +1,4 @@
+
 export enum JobStatus {
   SCHEDULED = 'Agendada',
   IN_PROGRESS = 'Em andamento',
@@ -19,17 +20,26 @@ export interface Installer {
   active: boolean;
 }
 
+export interface JobItem {
+  name: string;
+  quantity: number;
+  pricePerUnit: number;
+  total: number;
+}
+
 export interface Job {
   id: string;
   orderNumber: string;
   clientName: string;
   address: string;
   date: string; // ISO String
-  description: string;
+  description: string; // Used as Service Order details
   value: number;
   status: JobStatus;
   paymentStatus: PaymentStatus;
-  installerId: string; // For simplicity, one installer per job main responsibility
+  installerId: string;
+  items?: JobItem[]; // Detailed items
+  photoUrl?: string; // Base64 string for the photo
   notes?: string;
 }
 

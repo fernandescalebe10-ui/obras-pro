@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { Job, Installer, JobStatus, PaymentStatus, ServiceDefinition } from '../types';
 import { INITIAL_INSTALLERS, INITIAL_JOBS, INITIAL_SERVICES } from '../constants';
+import { supabase } from '../services/supabase';
 
 interface AppContextType {
   jobs: Job[];
@@ -51,27 +52,83 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [services]);
 
   const addJob = (job: Job) => {
-    setJobs(prev => [job, ...prev]);
+    // Insert into Supabase and update local state
+    (async () => {
+      try {
+        const { error } = await supabase.from('jobs').insert([job]);
+        if (error) throw error;
+        setJobs(prev => [job, ...prev]);
+      } catch (err) {
+        console.error('Failed to add job to Supabase:', err);
+        // Fallback to local update
+        setJobs(prev => [job, ...prev]);
+      }
+    })();
   };
 
   const updateJob = (updatedJob: Job) => {
-    setJobs(prev => prev.map(j => j.id === updatedJob.id ? updatedJob : j));
+    (async () => {
+      try {
+        const { error } = await supabase.from('jobs').update(updatedJob).eq('id', updatedJob.id);
+        if (error) throw error;
+        setJobs(prev => prev.map(j => j.id === updatedJob.id ? updatedJob : j));
+      } catch (err) {
+        console.error('Failed to update job in Supabase:', err);
+        setJobs(prev => prev.map(j => j.id === updatedJob.id ? updatedJob : j));
+      }
+    })();
   };
 
   const deleteJob = (id: string) => {
-    setJobs(prev => prev.filter(j => j.id !== id));
+    (async () => {
+      try {
+        const { error } = await supabase.from('jobs').delete().eq('id', id);
+        if (error) throw error;
+        setJobs(prev => prev.filter(j => j.id !== id));
+      } catch (err) {
+        console.error('Failed to delete job from Supabase:', err);
+        setJobs(prev => prev.filter(j => j.id !== id));
+      }
+    })();
   };
 
   const addInstaller = (installer: Installer) => {
-    setInstallers(prev => [...prev, installer]);
+    (async () => {
+      try {
+        const { error } = await supabase.from('installers').insert([installer]);
+        if (error) throw error;
+        setInstallers(prev => [...prev, installer]);
+      } catch (err) {
+        console.error('Failed to add installer to Supabase:', err);
+        setInstallers(prev => [...prev, installer]);
+      }
+    })();
   };
 
   const updateInstaller = (updatedInstaller: Installer) => {
-    setInstallers(prev => prev.map(i => i.id === updatedInstaller.id ? updatedInstaller : i));
+    (async () => {
+      try {
+        const { error } = await supabase.from('installers').update(updatedInstaller).eq('id', updatedInstaller.id);
+        if (error) throw error;
+        setInstallers(prev => prev.map(i => i.id === updatedInstaller.id ? updatedInstaller : i));
+      } catch (err) {
+        console.error('Failed to update installer in Supabase:', err);
+        setInstallers(prev => prev.map(i => i.id === updatedInstaller.id ? updatedInstaller : i));
+      }
+    })();
   };
 
   const deleteInstaller = (id: string) => {
-    setInstallers(prev => prev.filter(i => i.id !== id));
+    (async () => {
+      try {
+        const { error } = await supabase.from('installers').delete().eq('id', id);
+        if (error) throw error;
+        setInstallers(prev => prev.filter(i => i.id !== id));
+      } catch (err) {
+        console.error('Failed to delete installer from Supabase:', err);
+        setInstallers(prev => prev.filter(i => i.id !== id));
+      }
+    })();
   };
 
   const getInstallerName = (id: string) => {
@@ -81,16 +138,68 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Service Operations
   const addService = (service: ServiceDefinition) => {
-    setServices(prev => [...prev, service]);
+    (async () => {
+      try {
+        const { error } = await supabase.from('services').insert([service]);
+        if (error) throw error;
+        setServices(prev => [...prev, service]);
+      } catch (err) {
+        console.error('Failed to add service to Supabase:', err);
+        setServices(prev => [...prev, service]);
+      }
+    })();
   };
 
   const updateService = (updatedService: ServiceDefinition) => {
-    setServices(prev => prev.map(s => s.id === updatedService.id ? updatedService : s));
+    (async () => {
+      try {
+        const { error } = await supabase.from('services').update(updatedService).eq('id', updatedService.id);
+        if (error) throw error;
+        setServices(prev => prev.map(s => s.id === updatedService.id ? updatedService : s));
+      } catch (err) {
+        console.error('Failed to update service in Supabase:', err);
+        setServices(prev => prev.map(s => s.id === updatedService.id ? updatedService : s));
+      }
+    })();
   };
 
   const deleteService = (id: string) => {
-    setServices(prev => prev.filter(s => s.id !== id));
+    (async () => {
+      try {
+        const { error } = await supabase.from('services').delete().eq('id', id);
+        if (error) throw error;
+        setServices(prev => prev.filter(s => s.id !== id));
+      } catch (err) {
+        console.error('Failed to delete service from Supabase:', err);
+        setServices(prev => prev.filter(s => s.id !== id));
+      }
+    })();
   };
+
+  // Load data from Supabase on mount (if configured)
+  useEffect(() => {
+    const load = async () => {
+      try {
+        // Jobs
+        const { data: jobsData, error: jobsError } = await supabase.from('jobs').select('*').order('date', { ascending: false });
+        if (jobsError) throw jobsError;
+        if (jobsData) setJobs(jobsData as Job[]);
+
+        // Installers
+        const { data: installersData, error: installersError } = await supabase.from('installers').select('*');
+        if (installersError) throw installersError;
+        if (installersData) setInstallers(installersData as Installer[]);
+
+        // Services
+        const { data: servicesData, error: servicesError } = await supabase.from('services').select('*');
+        if (servicesError) throw servicesError;
+        if (servicesData) setServices(servicesData as ServiceDefinition[]);
+      } catch (err) {
+        console.warn('Could not load data from Supabase (falling back to local data):', err);
+      }
+    };
+    load();
+  }, []);
 
   return (
     <AppContext.Provider value={{

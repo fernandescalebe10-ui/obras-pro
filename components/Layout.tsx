@@ -54,7 +54,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             {/* Logo Container - Rounded Square for full image visibility */}
             <div className="bg-white h-14 w-14 rounded-lg flex items-center justify-center shrink-0 shadow-lg overflow-hidden p-1">
               <img 
-                src="./images/Granpisos.jpeg"
+                src="../images/Granpisos.jpeg" 
                 alt="Logo" 
                 className="h-full w-full object-contain"
                 onError={(e) => {

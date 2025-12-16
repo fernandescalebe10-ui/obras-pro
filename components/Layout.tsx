@@ -8,7 +8,8 @@ import {
   Wallet, 
   Menu, 
   X,
-  LogOut
+  LogOut,
+  Wrench
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -25,6 +26,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { path: '/jobs', label: 'Obras', icon: Hammer },
     { path: '/financial', label: 'Financeiro', icon: Wallet },
     { path: '/installers', label: 'Instaladores', icon: Users },
+    { path: '/services', label: 'Serviços', icon: Wrench },
   ];
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
@@ -47,14 +49,26 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         `}
       >
-        <div className="flex items-center justify-between h-16 px-6 bg-slate-800 border-b border-slate-700">
-          <div className="flex items-center justify-center w-full lg:justify-start">
-            <div className="flex items-baseline">
-              <span className="text-3xl font-extrabold text-blue-500 tracking-tight">Granpiso</span>
-              <span className="text-lg font-bold text-red-500 ml-1">Obras</span>
+        <div className="flex items-center h-28 px-4 bg-slate-800 border-b border-slate-700">
+          <div className="flex items-center w-full gap-3">
+            {/* Logo Container - Rounded Square for full image visibility */}
+            <div className="bg-white h-14 w-14 rounded-lg flex items-center justify-center shrink-0 shadow-lg overflow-hidden p-1">
+              <img 
+                src="./images/Granpisos.jpeg"
+                alt="Logo" 
+                className="h-full w-full object-contain"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            </div>
+            
+            <div className="flex flex-col justify-center">
+              <span className="text-xl font-black text-blue-500 leading-none tracking-tight">Departamento</span>
+              <span className="text-base font-bold text-red-600 leading-none tracking-wide mt-1">Obras</span>
             </div>
           </div>
-          <button onClick={toggleSidebar} className="lg:hidden text-gray-300 hover:text-white ml-2">
+          <button onClick={toggleSidebar} className="lg:hidden text-gray-300 hover:text-white ml-auto">
             <X size={24} />
           </button>
         </div>
@@ -87,7 +101,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             Sair do Sistema
           </button>
           <div className="mt-4 px-4 text-xs text-slate-500">
-            v1.0.1
+            v1.1.0
           </div>
         </div>
       </aside>

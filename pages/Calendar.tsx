@@ -1,21 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
   startOfMonth, endOfMonth, eachDayOfInterval, format, isSameDay, 
   addMonths, subMonths, isWeekend
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Job, JobStatus, PaymentStatus } from '../types';
-import { ChevronLeft, ChevronRight, Plus, X, Calendar as CalendarIcon, Save } from 'lucide-react';
+import { Job, JobStatus, PaymentStatus, JobItem } from '../types';
+import { ChevronLeft, ChevronRight, Plus, X, Calendar as CalendarIcon, Save, Calculator, Trash2, Upload } from 'lucide-react';
 
 const Calendar: React.FC = () => {
-  const { jobs, installers, addJob, updateJob, deleteJob } = useApp();
+  const { jobs, installers, services, addJob, updateJob, deleteJob } = useApp();
   const [currentDate, setCurrentDate] = useState(new Date());
   
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<Partial<Job> | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<{date: Date, installerId: string} | null>(null);
+  const [jobItems, setJobItems] = useState<JobItem[]>([]);
 
   // Calendar Generation
   const monthStart = startOfMonth(currentDate);
@@ -35,10 +36,40 @@ const Calendar: React.FC = () => {
   const getStatusStyle = (status: JobStatus) => {
     switch (status) {
       case JobStatus.SCHEDULED: return 'bg-white border-l-4 border-blue-500 text-gray-800';
-      case JobStatus.IN_PROGRESS: return 'bg-orange-100 border-l-4 border-orange-500 text-orange-900'; // Similar to image orange
+      case JobStatus.IN_PROGRESS: return 'bg-orange-100 border-l-4 border-orange-500 text-orange-900'; 
       case JobStatus.FINISHED: return 'bg-green-100 border-l-4 border-green-500 text-green-900';
-      case JobStatus.CANCELLED: return 'bg-red-500 text-white'; // Similar to image red
+      case JobStatus.CANCELLED: return 'bg-red-500 text-white'; 
       default: return 'bg-gray-50 text-gray-800';
+    }
+  };
+
+  const initializeItems = () => {
+    return services.map(service => ({
+      name: service.name,
+      quantity: 0,
+      pricePerUnit: service.defaultPrice,
+      total: 0
+    }));
+  };
+
+  const prepareItemsForJob = (job?: Job) => {
+    if (job && job.items && job.items.length > 0) {
+      // Create a map of existing items
+      const existingMap = new Map(job.items.map(i => [i.name, i]));
+      
+      const mergedItems = services.map(service => {
+        const existing = existingMap.get(service.name);
+        return existing || { name: service.name, quantity: 0, pricePerUnit: service.defaultPrice, total: 0 };
+      });
+      // Add custom items
+      job.items.forEach(item => {
+        if (!services.some(s => s.name === item.name)) {
+          mergedItems.push(item);
+        }
+      });
+      setJobItems(mergedItems);
+    } else {
+      setJobItems(initializeItems());
     }
   };
 
@@ -48,25 +79,84 @@ const Calendar: React.FC = () => {
     setEditingJob({
       status: JobStatus.SCHEDULED,
       paymentStatus: PaymentStatus.PENDING,
-      value: 0
+      value: 0,
+      photoUrl: ''
     });
+    setJobItems(initializeItems());
     setIsModalOpen(true);
   };
 
   const handleJobClick = (e: React.MouseEvent, job: Job) => {
-    e.stopPropagation(); // Prevent triggering cell click
+    e.stopPropagation(); 
     setEditingJob({ ...job });
-    setSelectedSlot(null); // We are editing, not creating from slot
+    prepareItemsForJob(job);
+    setSelectedSlot(null); 
     setIsModalOpen(true);
+  };
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setEditingJob(prev => prev ? ({ ...prev, photoUrl: reader.result as string }) : null);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Recalculate total
+  useEffect(() => {
+    if (isModalOpen && editingJob) {
+      const total = jobItems.reduce((acc, item) => acc + item.total, 0);
+      const safeTotal = Number(total.toFixed(2));
+      setEditingJob(prev => prev ? ({ ...prev, value: safeTotal }) : null);
+    }
+  }, [jobItems]);
+
+  const handleItemChange = (index: number, field: 'quantity' | 'pricePerUnit' | 'name', value: string | number) => {
+    const newItems = [...jobItems];
+    const item = newItems[index];
+    
+    if (field === 'name') {
+        item.name = value as string;
+    } else {
+        const numValue = typeof value === 'string' ? parseFloat(value) : value;
+        const safeValue = isNaN(numValue) ? 0 : numValue;
+        
+        if (field === 'quantity') item.quantity = safeValue;
+        if (field === 'pricePerUnit') item.pricePerUnit = safeValue;
+        
+        item.total = Number((item.quantity * item.pricePerUnit).toFixed(2));
+    }
+    
+    setJobItems(newItems);
+  };
+
+  const addItem = () => {
+    setJobItems([...jobItems, { name: '', quantity: 0, pricePerUnit: 0, total: 0 }]);
+  };
+
+  const removeItem = (index: number) => {
+    const newItems = jobItems.filter((_, i) => i !== index);
+    setJobItems(newItems);
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingJob) return;
 
+    // Filter active items
+    const activeItems = jobItems.filter(item => item.name.trim() !== '' && (item.quantity > 0 || item.pricePerUnit > 0));
+
     if (editingJob.id) {
       // Update existing
-      updateJob(editingJob as Job);
+      updateJob({
+          ...editingJob as Job,
+          items: activeItems,
+          value: Number(editingJob.value?.toFixed(2)),
+          photoUrl: editingJob.photoUrl
+      });
     } else if (selectedSlot) {
       // Create new
       const newJob: Job = {
@@ -76,11 +166,13 @@ const Calendar: React.FC = () => {
         clientName: editingJob.clientName || 'Novo Cliente',
         orderNumber: editingJob.orderNumber || 'S/N',
         description: editingJob.description || '',
-        value: Number(editingJob.value) || 0,
+        value: Number(editingJob.value?.toFixed(2)) || 0,
         status: editingJob.status as JobStatus || JobStatus.SCHEDULED,
         paymentStatus: editingJob.paymentStatus as PaymentStatus || PaymentStatus.PENDING,
         address: '',
-        notes: ''
+        notes: '',
+        items: activeItems,
+        photoUrl: editingJob.photoUrl
       };
       addJob(newJob);
     }
@@ -120,22 +212,22 @@ const Calendar: React.FC = () => {
       </div>
 
       {/* Spreadsheet / Matrix View */}
-      <div className="flex-1 overflow-auto bg-white shadow rounded-lg border border-gray-200 relative">
+      <div className="flex-1 overflow-auto bg-white shadow rounded-lg border border-black relative">
         <table className="min-w-full border-collapse">
           <thead className="bg-gray-100 sticky top-0 z-10 shadow-sm">
             <tr>
-              <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-b border-r border-gray-300 min-w-[200px] sticky left-0 bg-gray-100 z-20">
+              <th className="p-3 text-left text-xs font-bold text-gray-900 uppercase tracking-wider border-b border-r border-black min-w-[200px] sticky left-0 bg-gray-100 z-20">
                 Data
               </th>
               {installers.filter(i => i.active).map(installer => (
-                <th key={installer.id} className="p-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider border-b border-r border-gray-300 min-w-[180px]">
+                <th key={installer.id} className="p-3 text-center text-xs font-bold text-gray-900 uppercase tracking-wider border-b border-r border-black min-w-[180px]">
                   {installer.name}
-                  <div className="text-[10px] text-gray-400 font-normal">{installer.specialty}</div>
+                  <div className="text-[10px] text-gray-600 font-normal">{installer.specialty}</div>
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody>
             {calendarDays.map((day) => {
               const isWeekendDay = isWeekend(day);
               const rowClass = isWeekendDay ? 'bg-slate-50' : 'bg-white';
@@ -143,9 +235,9 @@ const Calendar: React.FC = () => {
               return (
                 <tr key={day.toISOString()} className={rowClass}>
                   {/* Date Column (Sticky) */}
-                  <td className={`p-3 text-sm border-r border-gray-200 sticky left-0 z-10 ${rowClass} font-medium text-gray-700`}>
+                  <td className={`p-3 text-sm border-r border-b border-black sticky left-0 z-10 ${rowClass} font-medium text-gray-900`}>
                     <div className="capitalize">{format(day, 'EEEE', { locale: ptBR })}</div>
-                    <div className="text-xs text-gray-500">{format(day, "d 'de' MMMM 'de' yyyy", { locale: ptBR })}</div>
+                    <div className="text-xs text-gray-600">{format(day, "d 'de' MMMM 'de' yyyy", { locale: ptBR })}</div>
                   </td>
 
                   {/* Installer Columns */}
@@ -154,7 +246,7 @@ const Calendar: React.FC = () => {
                     return (
                       <td 
                         key={`${day}-${installer.id}`} 
-                        className="p-1 border-r border-gray-200 align-top min-h-[80px] hover:bg-blue-50/50 transition-colors cursor-pointer relative group"
+                        className="p-1 border-r border-b border-black align-top min-h-[80px] hover:bg-blue-50/50 transition-colors cursor-pointer relative group"
                         onClick={() => handleCellClick(day, installer.id)}
                       >
                         <div className="min-h-[60px] flex flex-col gap-1">
@@ -167,7 +259,7 @@ const Calendar: React.FC = () => {
                               >
                                 <div className="font-bold truncate">{job.clientName}</div>
                                 <div className="truncate opacity-90">{job.orderNumber}</div>
-                                {job.value > 0 && <div className="mt-1 font-mono opacity-75">R$ {job.value}</div>}
+                                {job.value > 0 && <div className="mt-1 font-mono opacity-75">R$ {job.value.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>}
                               </div>
                             ))
                           ) : (
@@ -186,11 +278,11 @@ const Calendar: React.FC = () => {
         </table>
       </div>
 
-      {/* Edit/Create Modal */}
+      {/* Edit/Create Modal with Calculator */}
       {isModalOpen && editingJob && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-60 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl animate-fade-in flex flex-col max-h-[90vh]">
-            <div className="flex justify-between items-center p-5 border-b">
+          <div className="bg-white rounded-xl w-full max-w-5xl shadow-2xl animate-fade-in flex flex-col max-h-[95vh]">
+            <div className="flex justify-between items-center p-5 border-b shrink-0">
               <div>
                 <h3 className="text-xl font-bold text-gray-800">
                   {editingJob.id ? 'Editar Agendamento' : 'Novo Agendamento'}
@@ -207,100 +299,214 @@ const Calendar: React.FC = () => {
               </button>
             </div>
             
-            <form onSubmit={handleSave} className="p-6 space-y-4 overflow-y-auto">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Cliente / Obra</label>
-                <input 
-                  autoFocus
-                  required
-                  type="text" 
-                  className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-primary focus:border-primary transition-shadow"
-                  value={editingJob.clientName || ''}
-                  onChange={e => setEditingJob({...editingJob, clientName: e.target.value})}
-                  placeholder="Nome do cliente ou local"
-                />
-              </div>
+            <form onSubmit={handleSave} className="flex flex-col md:flex-row h-full overflow-hidden">
+               {/* Left Side: Details */}
+               <div className="p-6 md:w-1/3 border-r overflow-y-auto space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Cliente / Obra</label>
+                    <input 
+                      autoFocus
+                      required
+                      type="text" 
+                      className="w-full bg-white text-gray-900 border border-gray-400 rounded-lg p-2.5 focus:ring-2 focus:ring-primary focus:border-primary transition-shadow"
+                      value={editingJob.clientName || ''}
+                      onChange={e => setEditingJob({...editingJob, clientName: e.target.value})}
+                      placeholder="Nome do cliente ou local"
+                    />
+                  </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Nº Pedido</label>
-                  <input 
-                    type="text" 
-                    className="w-full border border-gray-300 rounded-lg p-2.5"
-                    value={editingJob.orderNumber || ''}
-                    onChange={e => setEditingJob({...editingJob, orderNumber: e.target.value})}
-                    placeholder="Ex: 19537"
-                  />
-                </div>
-                <div>
-                   <label className="block text-sm font-semibold text-gray-700 mb-1">Valor (R$)</label>
-                   <input 
-                    type="number"
-                    step="0.01"
-                    className="w-full border border-gray-300 rounded-lg p-2.5"
-                    value={editingJob.value || 0}
-                    onChange={e => setEditingJob({...editingJob, value: parseFloat(e.target.value)})}
-                  />
-                </div>
-              </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Nº Pedido</label>
+                    <input 
+                      type="text" 
+                      className="w-full bg-white text-gray-900 border border-gray-400 rounded-lg p-2.5"
+                      value={editingJob.orderNumber || ''}
+                      onChange={e => setEditingJob({...editingJob, orderNumber: e.target.value})}
+                      placeholder="Ex: 19537"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Status</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {Object.values(JobStatus).map(status => (
+                        <button
+                          key={status}
+                          type="button"
+                          onClick={() => setEditingJob({...editingJob, status: status})}
+                          className={`px-2 py-2 text-xs rounded-md border text-center transition-colors
+                            ${editingJob.status === status 
+                              ? 'bg-blue-50 border-blue-500 text-blue-700 font-medium ring-1 ring-blue-500' 
+                              : 'bg-white border-gray-400 text-gray-600 hover:bg-gray-50'
+                            }`}
+                        >
+                          {status}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Status</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {Object.values(JobStatus).map(status => (
-                    <button
-                      key={status}
-                      type="button"
-                      onClick={() => setEditingJob({...editingJob, status: status})}
-                      className={`px-3 py-2 text-sm rounded-md border text-left transition-colors
-                        ${editingJob.status === status 
-                          ? 'bg-blue-50 border-blue-500 text-blue-700 font-medium ring-1 ring-blue-500' 
-                          : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-                        }`}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Pagamento</label>
+                    <select 
+                      className="w-full bg-white text-gray-900 border border-gray-400 rounded-lg p-2.5"
+                      value={editingJob.paymentStatus}
+                      onChange={e => setEditingJob({...editingJob, paymentStatus: e.target.value as PaymentStatus})}
                     >
-                      {status}
+                      {Object.values(PaymentStatus).map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Ordem de Serviço & Foto Area */}
+                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 mt-4">
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Ordem de Serviço</label>
+                    
+                    <textarea 
+                      rows={2}
+                      className="w-full bg-white text-gray-900 border border-gray-400 rounded-md p-2 text-sm mb-3"
+                      value={editingJob.description || ''}
+                      onChange={e => setEditingJob({...editingJob, description: e.target.value})}
+                      placeholder="Detalhes da OS..."
+                    />
+
+                    <div className="flex items-center gap-2">
+                       <label className="cursor-pointer bg-white border border-gray-400 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-md shadow-sm text-sm flex items-center justify-center w-full">
+                          <Upload size={16} className="mr-2" />
+                          {editingJob.photoUrl ? 'Trocar Foto' : 'Adicionar Foto'}
+                          <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                       </label>
+                    </div>
+
+                    {editingJob.photoUrl && (
+                      <div className="mt-3 relative h-32 w-full rounded-md overflow-hidden border border-gray-400">
+                        <img src={editingJob.photoUrl} alt="OS Preview" className="h-full w-full object-cover" />
+                        <button 
+                          type="button"
+                          onClick={() => setEditingJob({...editingJob, photoUrl: ''})}
+                          className="absolute top-1 right-1 bg-white rounded-full p-1 shadow hover:text-red-600"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+               </div>
+
+               {/* Right Side: Calculator */}
+               <div className="p-6 md:w-2/3 flex flex-col bg-gray-50">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Calculator className="text-primary" />
+                      <h4 className="text-lg font-bold text-gray-800">Calculadora de Serviços</h4>
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={addItem}
+                      className="flex items-center text-sm bg-green-50 text-green-600 px-3 py-1 rounded hover:bg-green-100 border border-green-200"
+                    >
+                      <Plus size={16} className="mr-1" />
+                      Adicionar Item
                     </button>
-                  ))}
-                </div>
-              </div>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto bg-white rounded-lg shadow border border-gray-200">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-100 sticky top-0 z-10">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Item</th>
+                          <th className="px-2 py-2 text-center text-xs font-bold text-gray-500 uppercase w-20">Qtd</th>
+                          <th className="px-2 py-2 text-center text-xs font-bold text-gray-500 uppercase w-24">R$ Unit.</th>
+                          <th className="px-3 py-2 text-right text-xs font-bold text-gray-500 uppercase w-24">Total</th>
+                          <th className="w-8"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {jobItems.map((item, index) => {
+                           // Allow editing of standard item names as well
+                          return (
+                          <tr key={index} className="hover:bg-blue-50/30">
+                            <td className="px-3 py-1 text-sm font-medium text-gray-700">
+                                <input
+                                  type="text"
+                                  className="w-full bg-white text-gray-900 border border-gray-400 rounded-md text-xs p-2 shadow-sm focus:ring-2 focus:ring-primary focus:border-primary font-medium placeholder-gray-500"
+                                  value={item.name}
+                                  placeholder="Nome"
+                                  onChange={e => handleItemChange(index, 'name', e.target.value)}
+                                />
+                            </td>
+                            <td className="px-2 py-1">
+                              <input 
+                                type="number" 
+                                min="0"
+                                step="0.01"
+                                className="w-full bg-white text-gray-900 border border-gray-400 rounded-md text-center text-xs p-2 shadow-sm focus:ring-2 focus:ring-primary focus:border-primary font-medium placeholder-gray-500"
+                                value={item.quantity || ''}
+                                onChange={e => handleItemChange(index, 'quantity', e.target.value)}
+                                placeholder="0"
+                              />
+                            </td>
+                            <td className="px-2 py-1">
+                              <input 
+                                type="number" 
+                                min="0"
+                                step="0.01"
+                                className="w-full bg-white text-gray-900 border border-gray-400 rounded-md text-center text-xs p-2 shadow-sm focus:ring-2 focus:ring-primary focus:border-primary font-medium placeholder-gray-500"
+                                value={item.pricePerUnit || ''}
+                                onChange={e => handleItemChange(index, 'pricePerUnit', e.target.value)}
+                                placeholder="0"
+                              />
+                            </td>
+                            <td className="px-3 py-1 text-right text-sm font-bold text-gray-900 bg-gray-50/50 flex items-center justify-end h-full mt-1.5">
+                              R$ {item.total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                             <td className="px-1 py-1 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => removeItem(index)}
+                                  className="text-red-400 hover:text-red-600 transition-colors p-2 rounded-full hover:bg-red-50"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                            </td>
+                          </tr>
+                        )})}
+                      </tbody>
+                    </table>
+                  </div>
 
-              <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Observações</label>
-                  <textarea 
-                    className="w-full border border-gray-300 rounded-lg p-2.5"
-                    rows={2}
-                    value={editingJob.description || ''}
-                    onChange={e => setEditingJob({...editingJob, description: e.target.value})}
-                    placeholder="Detalhes adicionais..."
-                  />
-              </div>
+                  {/* Total & Actions */}
+                  <div className="mt-4 pt-2 border-t flex items-center justify-between">
+                     <span className="font-medium text-gray-600">Total:</span>
+                     <span className="text-2xl font-bold text-primary">R$ {Number(editingJob.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
 
-              <div className="pt-4 flex gap-3 border-t mt-4">
-                {editingJob.id && (
-                  <button 
-                    type="button"
-                    onClick={handleDelete}
-                    className="px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg font-medium transition-colors"
-                  >
-                    Excluir
-                  </button>
-                )}
-                <div className="flex-1"></div>
-                <button 
-                  type="button" 
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  type="submit" 
-                  className="px-6 py-2 bg-primary text-white rounded-lg font-medium hover:bg-blue-700 shadow-sm flex items-center"
-                >
-                  <Save size={18} className="mr-2" />
-                  Salvar
-                </button>
-              </div>
+                  <div className="flex gap-3 mt-4">
+                     {editingJob.id && (
+                        <button 
+                          type="button"
+                          onClick={handleDelete}
+                          className="px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg font-medium"
+                        >
+                          Excluir
+                        </button>
+                      )}
+                      <div className="flex-1"></div>
+                      <button 
+                        type="button" 
+                        onClick={() => setIsModalOpen(false)}
+                        className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium"
+                      >
+                        Cancelar
+                      </button>
+                      <button 
+                        type="submit" 
+                        className="px-6 py-2 bg-primary text-white rounded-lg font-medium hover:bg-blue-700 shadow-sm flex items-center"
+                      >
+                        <Save size={18} className="mr-2" />
+                        Salvar
+                      </button>
+                  </div>
+               </div>
             </form>
           </div>
         </div>

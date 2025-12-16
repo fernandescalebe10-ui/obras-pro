@@ -1,9 +1,23 @@
-import { Installer, Job, JobStatus, PaymentStatus } from './types';
+import { Installer, Job, JobStatus, PaymentStatus, ServiceDefinition } from './types';
 
 export const INITIAL_INSTALLERS: Installer[] = [
   { id: '1', name: 'Carlos Silva', phone: '(11) 99999-1234', specialty: 'Elétrica', active: true },
   { id: '2', name: 'João Santos', phone: '(11) 98888-4321', specialty: 'Hidráulica', active: true },
   { id: '3', name: 'Marcos Oliveira', phone: '(11) 97777-5678', specialty: 'Geral', active: true },
+];
+
+export const INITIAL_SERVICES: ServiceDefinition[] = [
+  { id: '1', name: 'Piso Laminado', defaultPrice: 25.00 },
+  { id: '2', name: 'Piso Vinílico', defaultPrice: 30.00 },
+  { id: '3', name: 'Rodapé até 10cm em mdf', defaultPrice: 12.00 },
+  { id: '4', name: 'Rodapé até 10cm em poliestireno', defaultPrice: 15.00 },
+  { id: '5', name: 'Rodapé até 15cm em mdf', defaultPrice: 18.00 },
+  { id: '6', name: 'Rodapé até 15cm em poliestireno', defaultPrice: 22.00 },
+  { id: '7', name: 'Cordão', defaultPrice: 8.00 },
+  { id: '8', name: 'Remoção de Piso', defaultPrice: 10.00 },
+  { id: '9', name: 'Remoção de Rodapé', defaultPrice: 5.00 },
+  { id: '10', name: 'Instalação Escada Piso Laminado', defaultPrice: 45.00 },
+  { id: '11', name: 'Instalação Escada Piso Vinílico', defaultPrice: 50.00 }
 ];
 
 export const INITIAL_JOBS: Job[] = [

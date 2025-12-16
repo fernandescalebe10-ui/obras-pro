@@ -66,13 +66,24 @@ const Financial: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Hide controls when printing */}
+      {/* CSS for Printing */}
       <style>{`
         @media print {
           .no-print { display: none !important; }
           .print-only { display: block !important; }
           body { background-color: white; }
-          .page-break { page-break-before: always; }
+          
+          /* Ensures tables break correctly across pages */
+          table { page-break-inside: auto; }
+          tr { page-break-inside: avoid; page-break-after: auto; }
+          thead { display: table-header-group; }
+          tfoot { display: table-footer-group; }
+          
+          /* Container adjustments */
+          .overflow-hidden { overflow: visible !important; }
+          .shadow { box-shadow: none !important; }
+          .border { border: 1px solid #ddd !important; }
+          
           /* Ensure backgrounds print */
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
@@ -82,7 +93,7 @@ const Financial: React.FC = () => {
         <h2 className="text-2xl font-bold text-gray-800">Controle Financeiro</h2>
       </div>
 
-      {/* Summary Cards (Hidden on print if you only want the list, but usually good to keep) */}
+      {/* Summary Cards (Hidden on print) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 no-print">
         <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
            <div className="flex items-center justify-between">
@@ -255,7 +266,7 @@ const Financial: React.FC = () => {
                        <ul className="list-disc pl-4 space-y-1">
                          {job.items.filter(i => i.quantity > 0).map((item, idx) => (
                            <li key={idx}>
-                             <span className="font-medium">{item.name}:</span> {item.quantity} un/m x R$ {item.pricePerUnit} = <b>R$ {item.total}</b>
+                             <span className="font-medium">{item.name}:</span> {item.quantity} un/m x R$ {item.pricePerUnit} = <b>R$ {item.total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</b>
                            </li>
                          ))}
                        </ul>

@@ -7,6 +7,7 @@ import Jobs from './pages/Jobs';
 import Calendar from './pages/Calendar';
 import Financial from './pages/Financial';
 import Installers from './pages/Installers';
+import Services from './pages/Services';
 
 const App: React.FC = () => {
   return (
@@ -19,6 +20,7 @@ const App: React.FC = () => {
             <Route path="/calendar" element={<Calendar />} />
             <Route path="/financial" element={<Financial />} />
             <Route path="/installers" element={<Installers />} />
+            <Route path="/services" element={<Services />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Layout>

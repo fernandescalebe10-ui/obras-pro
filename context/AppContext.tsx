@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { Job, Installer, JobStatus, PaymentStatus } from '../types';
-import { INITIAL_INSTALLERS, INITIAL_JOBS } from '../constants';
+import { Job, Installer, JobStatus, PaymentStatus, ServiceDefinition } from '../types';
+import { INITIAL_INSTALLERS, INITIAL_JOBS, INITIAL_SERVICES } from '../constants';
 
 interface AppContextType {
   jobs: Job[];
   installers: Installer[];
+  services: ServiceDefinition[];
   addJob: (job: Job) => void;
   updateJob: (job: Job) => void;
   deleteJob: (id: string) => void;
@@ -12,6 +13,9 @@ interface AppContextType {
   updateInstaller: (installer: Installer) => void;
   deleteInstaller: (id: string) => void;
   getInstallerName: (id: string) => string;
+  addService: (service: ServiceDefinition) => void;
+  updateService: (service: ServiceDefinition) => void;
+  deleteService: (id: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -28,6 +32,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return saved ? JSON.parse(saved) : INITIAL_INSTALLERS;
   });
 
+  const [services, setServices] = useState<ServiceDefinition[]>(() => {
+    const saved = localStorage.getItem('app_services');
+    return saved ? JSON.parse(saved) : INITIAL_SERVICES;
+  });
+
   // Persist to localStorage
   useEffect(() => {
     localStorage.setItem('app_jobs', JSON.stringify(jobs));
@@ -36,6 +45,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     localStorage.setItem('app_installers', JSON.stringify(installers));
   }, [installers]);
+
+  useEffect(() => {
+    localStorage.setItem('app_services', JSON.stringify(services));
+  }, [services]);
 
   const addJob = (job: Job) => {
     setJobs(prev => [job, ...prev]);
@@ -66,17 +79,34 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return inst ? inst.name : 'Desconhecido';
   };
 
+  // Service Operations
+  const addService = (service: ServiceDefinition) => {
+    setServices(prev => [...prev, service]);
+  };
+
+  const updateService = (updatedService: ServiceDefinition) => {
+    setServices(prev => prev.map(s => s.id === updatedService.id ? updatedService : s));
+  };
+
+  const deleteService = (id: string) => {
+    setServices(prev => prev.filter(s => s.id !== id));
+  };
+
   return (
     <AppContext.Provider value={{
       jobs,
       installers,
+      services,
       addJob,
       updateJob,
       deleteJob,
       addInstaller,
       updateInstaller,
       deleteInstaller,
-      getInstallerName
+      getInstallerName,
+      addService,
+      updateService,
+      deleteService
     }}>
       {children}
     </AppContext.Provider>

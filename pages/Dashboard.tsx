@@ -129,7 +129,7 @@ const Dashboard: React.FC = () => {
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Pagamento Efetuado</dt>
-                  <dd className="text-2xl font-semibold text-gray-900">R$ {totalReceived.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</dd>
+                  <dd className="text-2xl font-semibold text-gray-900">R$ {totalReceived.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</dd>
                 </dl>
               </div>
             </div>
@@ -145,7 +145,7 @@ const Dashboard: React.FC = () => {
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Pagamento Pendente</dt>
-                  <dd className="text-2xl font-semibold text-gray-900">R$ {totalPending.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</dd>
+                  <dd className="text-2xl font-semibold text-gray-900">R$ {totalPending.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</dd>
                 </dl>
               </div>
             </div>
@@ -249,7 +249,7 @@ const Dashboard: React.FC = () => {
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                 <XAxis type="number" />
                 <YAxis dataKey="name" type="category" />
-                <Tooltip formatter={(value: number) => `R$ ${value.toLocaleString()}`} />
+                <Tooltip formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
                 <Bar dataKey="value" fill="#2563eb" radius={[0, 4, 4, 0]} barSize={40} />
               </BarChart>
             </ResponsiveContainer>

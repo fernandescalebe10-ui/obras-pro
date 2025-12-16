@@ -1,25 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Job, JobStatus, PaymentStatus, JobItem } from '../types';
-import { Plus, Search, Filter, Edit, Trash2, X, Upload, Image as ImageIcon, Calculator } from 'lucide-react';
+import { Plus, Search, Filter, Edit, Trash2, X, Upload, Image as ImageIcon, Calculator, Minus } from 'lucide-react';
 import { format } from 'date-fns';
 
-const STANDARD_ITEMS = [
-  'Piso Laminado',
-  'Piso Vinílico',
-  'Rodapé até 10cm em mdf',
-  'Rodapé até 10cm em poliestireno',
-  'Rodapé até 15cm em mdf',
-  'Rodapé até 15cm em poliestireno',
-  'Cordão',
-  'Remoção de Piso',
-  'Remoção de Rodapé',
-  'Instalação Escada Piso Laminado',
-  'Instalação Escada Piso Vinílico'
-];
-
 const Jobs: React.FC = () => {
-  const { jobs, installers, addJob, updateJob, deleteJob, getInstallerName } = useApp();
+  const { jobs, installers, services, addJob, updateJob, deleteJob, getInstallerName } = useApp();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentJob, setCurrentJob] = useState<Partial<Job>>({});
@@ -38,10 +24,10 @@ const Jobs: React.FC = () => {
   };
 
   const initializeItems = () => {
-    return STANDARD_ITEMS.map(name => ({
-      name,
+    return services.map(service => ({
+      name: service.name,
       quantity: 0,
-      pricePerUnit: 0,
+      pricePerUnit: service.defaultPrice,
       total: 0
     }));
   };
@@ -64,10 +50,19 @@ const Jobs: React.FC = () => {
       // Create a map of existing items
       const existingMap = new Map(job.items.map(i => [i.name, i]));
       
-      const mergedItems = STANDARD_ITEMS.map(name => {
-        const existing = existingMap.get(name);
-        return existing || { name, quantity: 0, pricePerUnit: 0, total: 0 };
+      // Start with standard items from services context
+      const mergedItems = services.map(service => {
+        const existing = existingMap.get(service.name);
+        return existing || { name: service.name, quantity: 0, pricePerUnit: service.defaultPrice, total: 0 };
       });
+
+      // Add any custom items that were saved but are not in standard list
+      job.items.forEach(item => {
+        if (!services.some(s => s.name === item.name)) {
+          mergedItems.push(item);
+        }
+      });
+      
       setJobItems(mergedItems);
     } else {
       setJobItems(initializeItems());
@@ -79,17 +74,41 @@ const Jobs: React.FC = () => {
 
   // Recalculate total value whenever items change
   useEffect(() => {
+    // Fix floating point errors in total sum
     const total = jobItems.reduce((acc, item) => acc + item.total, 0);
-    setCurrentJob(prev => ({ ...prev, value: total }));
+    // Ensure final total is 2 decimals max
+    const safeTotal = Number(total.toFixed(2));
+    setCurrentJob(prev => ({ ...prev, value: safeTotal }));
   }, [jobItems]);
 
-  const handleItemChange = (index: number, field: 'quantity' | 'pricePerUnit', value: number) => {
+  const handleItemChange = (index: number, field: 'quantity' | 'pricePerUnit' | 'name', value: string | number) => {
     const newItems = [...jobItems];
     const item = newItems[index];
     
-    item[field] = value;
-    item.total = item.quantity * item.pricePerUnit;
+    if (field === 'name') {
+        item.name = value as string;
+    } else {
+        // Handle number inputs (allow decimals)
+        const numValue = typeof value === 'string' ? parseFloat(value) : value;
+        // Avoid NaN if field is empty
+        const safeValue = isNaN(numValue) ? 0 : numValue;
+        
+        if (field === 'quantity') item.quantity = safeValue;
+        if (field === 'pricePerUnit') item.pricePerUnit = safeValue;
+        
+        // Recalculate total line with 2 decimal precision
+        item.total = Number((item.quantity * item.pricePerUnit).toFixed(2));
+    }
     
+    setJobItems(newItems);
+  };
+
+  const addItem = () => {
+    setJobItems([...jobItems, { name: '', quantity: 0, pricePerUnit: 0, total: 0 }]);
+  };
+
+  const removeItem = (index: number) => {
+    const newItems = jobItems.filter((_, i) => i !== index);
     setJobItems(newItems);
   };
 
@@ -108,8 +127,8 @@ const Jobs: React.FC = () => {
     e.preventDefault();
     if (!currentJob.clientName || !currentJob.installerId) return;
 
-    // Filter out items with 0 total to save space, or keep them if you prefer persistence
-    const activeItems = jobItems.filter(item => item.quantity > 0 || item.pricePerUnit > 0);
+    // Filter out items with 0 total unless they have a name (custom item in progress)
+    const activeItems = jobItems.filter(item => item.name.trim() !== '' && (item.quantity > 0 || item.pricePerUnit > 0));
 
     const jobData: Job = {
         id: isEditing ? currentJob.id! : Date.now().toString(),
@@ -118,7 +137,7 @@ const Jobs: React.FC = () => {
         address: currentJob.address || '',
         date: new Date(currentJob.date!).toISOString(),
         description: currentJob.description || '',
-        value: Number(currentJob.value),
+        value: Number(currentJob.value?.toFixed(2)),
         status: currentJob.status as JobStatus,
         paymentStatus: currentJob.paymentStatus as PaymentStatus,
         installerId: currentJob.installerId!,
@@ -210,7 +229,7 @@ const Jobs: React.FC = () => {
                       {format(new Date(job.date), 'dd/MM/yyyy HH:mm')}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      R$ {job.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      R$ {job.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
@@ -257,7 +276,7 @@ const Jobs: React.FC = () => {
                     <input 
                       type="text" 
                       required
-                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-primary focus:border-primary"
+                      className="mt-1 block w-full bg-white text-gray-900 border border-gray-400 rounded-md shadow-sm p-2 focus:ring-primary focus:border-primary"
                       value={currentJob.clientName || ''}
                       onChange={e => setCurrentJob({...currentJob, clientName: e.target.value})}
                     />
@@ -267,7 +286,7 @@ const Jobs: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700">Número do Pedido</label>
                     <input 
                       type="text" 
-                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                      className="mt-1 block w-full bg-white text-gray-900 border border-gray-400 rounded-md shadow-sm p-2"
                       value={currentJob.orderNumber || ''}
                       onChange={e => setCurrentJob({...currentJob, orderNumber: e.target.value})}
                       placeholder="Ex: PED-1234"
@@ -278,7 +297,7 @@ const Jobs: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700">Instalador Responsável</label>
                     <select 
                       required
-                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                      className="mt-1 block w-full bg-white text-gray-900 border border-gray-400 rounded-md shadow-sm p-2"
                       value={currentJob.installerId || ''}
                       onChange={e => setCurrentJob({...currentJob, installerId: e.target.value})}
                     >
@@ -294,7 +313,7 @@ const Jobs: React.FC = () => {
                     <input 
                       type="datetime-local" 
                       required
-                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                      className="mt-1 block w-full bg-white text-gray-900 border border-gray-400 rounded-md shadow-sm p-2"
                       value={currentJob.date || ''}
                       onChange={e => setCurrentJob({...currentJob, date: e.target.value})}
                     />
@@ -303,7 +322,7 @@ const Jobs: React.FC = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Status</label>
                     <select 
-                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                      className="mt-1 block w-full bg-white text-gray-900 border border-gray-400 rounded-md shadow-sm p-2"
                       value={currentJob.status}
                       onChange={e => setCurrentJob({...currentJob, status: e.target.value as JobStatus})}
                     >
@@ -314,7 +333,7 @@ const Jobs: React.FC = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Pagamento</label>
                     <select 
-                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                      className="mt-1 block w-full bg-white text-gray-900 border border-gray-400 rounded-md shadow-sm p-2"
                       value={currentJob.paymentStatus}
                       onChange={e => setCurrentJob({...currentJob, paymentStatus: e.target.value as PaymentStatus})}
                     >
@@ -328,14 +347,14 @@ const Jobs: React.FC = () => {
                     
                     <textarea 
                       rows={2}
-                      className="w-full border border-gray-300 rounded-md p-2 text-sm mb-3"
+                      className="w-full bg-white text-gray-900 border border-gray-400 rounded-md p-2 text-sm mb-3"
                       placeholder="Detalhes da OS..."
                       value={currentJob.description || ''}
                       onChange={e => setCurrentJob({...currentJob, description: e.target.value})}
                     />
 
                     <div className="flex items-center gap-2">
-                       <label className="cursor-pointer bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-md shadow-sm text-sm flex items-center justify-center w-full">
+                       <label className="cursor-pointer bg-white border border-gray-400 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-md shadow-sm text-sm flex items-center justify-center w-full">
                           <Upload size={16} className="mr-2" />
                           {currentJob.photoUrl ? 'Trocar Foto' : 'Adicionar Foto'}
                           <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
@@ -343,7 +362,7 @@ const Jobs: React.FC = () => {
                     </div>
 
                     {currentJob.photoUrl && (
-                      <div className="mt-3 relative h-32 w-full rounded-md overflow-hidden border border-gray-300">
+                      <div className="mt-3 relative h-32 w-full rounded-md overflow-hidden border border-gray-400">
                         <img src={currentJob.photoUrl} alt="OS Preview" className="h-full w-full object-cover" />
                         <button 
                           type="button"
@@ -359,35 +378,53 @@ const Jobs: React.FC = () => {
 
               {/* RIGHT COLUMN: Items Calculator */}
               <div className="p-6 md:w-2/3 flex flex-col bg-gray-50">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Calculator className="text-primary" />
-                    <h4 className="text-lg font-bold text-gray-800">Calculadora de Serviços</h4>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Calculator className="text-primary" />
+                      <h4 className="text-lg font-bold text-gray-800">Calculadora de Serviços</h4>
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={addItem}
+                      className="flex items-center text-sm bg-green-50 text-green-600 px-3 py-1 rounded hover:bg-green-100 border border-green-200"
+                    >
+                      <Plus size={16} className="mr-1" />
+                      Adicionar Item
+                    </button>
                   </div>
                   
                   <div className="flex-1 overflow-y-auto bg-white rounded-lg shadow border border-gray-200">
                     <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-100 sticky top-0">
+                      <thead className="bg-gray-100 sticky top-0 z-10">
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase">Item</th>
-                          <th className="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase w-24">Qtd</th>
-                          <th className="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase w-32">R$ Unit.</th>
-                          <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase w-32">Total</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Item</th>
+                          <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase w-24">Qtd</th>
+                          <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase w-32">R$ Unit.</th>
+                          <th className="px-4 py-3 text-right text-xs font-bold text-gray-600 uppercase w-32">Total</th>
+                          <th className="px-2 py-3 w-10"></th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
-                        {jobItems.map((item, index) => (
+                        {jobItems.map((item, index) => {
+                          return (
                           <tr key={index} className="hover:bg-blue-50/30">
-                            <td className="px-4 py-2 text-sm font-medium text-gray-700">
-                              {item.name}
+                            <td className="px-4 py-2">
+                                <input
+                                  type="text"
+                                  className="w-full bg-white text-gray-900 border border-gray-400 rounded-md text-sm p-2 shadow-sm focus:ring-2 focus:ring-primary focus:border-primary font-medium placeholder-gray-500"
+                                  value={item.name}
+                                  placeholder="Nome do serviço"
+                                  onChange={e => handleItemChange(index, 'name', e.target.value)}
+                                />
                             </td>
                             <td className="px-4 py-2">
                               <input 
                                 type="number" 
                                 min="0"
-                                step="0.1"
-                                className="w-full border-gray-300 rounded-md text-center text-sm p-1 focus:ring-primary focus:border-primary border"
+                                step="0.01"
+                                className="w-full bg-white text-gray-900 border border-gray-400 rounded-md text-center text-sm p-2 shadow-sm focus:ring-2 focus:ring-primary focus:border-primary font-medium placeholder-gray-500"
                                 value={item.quantity || ''}
-                                onChange={e => handleItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
+                                onChange={e => handleItemChange(index, 'quantity', e.target.value)}
                                 placeholder="0"
                               />
                             </td>
@@ -396,17 +433,27 @@ const Jobs: React.FC = () => {
                                 type="number" 
                                 min="0"
                                 step="0.01"
-                                className="w-full border-gray-300 rounded-md text-center text-sm p-1 focus:ring-primary focus:border-primary border"
+                                className="w-full bg-white text-gray-900 border border-gray-400 rounded-md text-center text-sm p-2 shadow-sm focus:ring-2 focus:ring-primary focus:border-primary font-medium placeholder-gray-500"
                                 value={item.pricePerUnit || ''}
-                                onChange={e => handleItemChange(index, 'pricePerUnit', parseFloat(e.target.value) || 0)}
+                                onChange={e => handleItemChange(index, 'pricePerUnit', e.target.value)}
                                 placeholder="0.00"
                               />
                             </td>
-                            <td className="px-4 py-2 text-right text-sm font-bold text-gray-900 bg-gray-50/50">
-                              R$ {item.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            <td className="px-4 py-2 text-right text-sm font-bold text-gray-900 bg-gray-50/50 flex items-center justify-end h-full mt-1.5">
+                              R$ {item.total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-2 py-2 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => removeItem(index)}
+                                  className="text-red-400 hover:text-red-600 transition-colors p-2 rounded-full hover:bg-red-50"
+                                  title="Remover item"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
                             </td>
                           </tr>
-                        ))}
+                        )})}
                       </tbody>
                     </table>
                   </div>
@@ -415,7 +462,7 @@ const Jobs: React.FC = () => {
                   <div className="mt-4 p-4 bg-white rounded-lg shadow border border-gray-200 flex justify-between items-center">
                     <span className="text-lg font-medium text-gray-600">Valor Total da Obra:</span>
                     <span className="text-3xl font-bold text-primary">
-                      R$ {Number(currentJob.value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      R$ {Number(currentJob.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
 

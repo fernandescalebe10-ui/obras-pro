@@ -18,6 +18,14 @@ export interface Installer {
   phone: string;
   specialty: string;
   active: boolean;
+  photoUrl?: string;
+  pixKey?: string;
+}
+
+export interface ServiceDefinition {
+  id: string;
+  name: string;
+  defaultPrice: number;
 }
 
 export interface JobItem {

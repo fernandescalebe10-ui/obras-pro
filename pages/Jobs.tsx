@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Job, JobStatus, PaymentStatus, JobItem } from '../types';
-import { Plus, Search, Filter, Edit, Trash2, X, Upload, Image as ImageIcon, Calculator, Minus } from 'lucide-react';
+import { Plus, Search, Filter, Edit, Trash2, X, Upload, FileText, Calculator, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 
 const Jobs: React.FC = () => {
@@ -11,16 +11,16 @@ const Jobs: React.FC = () => {
   const [currentJob, setCurrentJob] = useState<Partial<Job>>({});
   const [isEditing, setIsEditing] = useState(false);
   
-  // Job Items State
   const [jobItems, setJobItems] = useState<JobItem[]>([]);
 
-  // Form Initial State
   const initialFormState: Partial<Job> = {
     status: JobStatus.SCHEDULED,
     paymentStatus: PaymentStatus.PENDING,
     date: new Date().toISOString().slice(0, 16),
     value: 0,
-    photoUrl: ''
+    photoUrl: '',
+    pdfUrl: '',
+    pdfName: ''
   };
 
   const initializeItems = () => {
@@ -45,38 +45,27 @@ const Jobs: React.FC = () => {
       date: new Date(job.date).toISOString().slice(0, 16)
     });
     
-    // Merge existing items with standard items or use existing
     if (job.items && job.items.length > 0) {
-      // Create a map of existing items
       const existingMap = new Map(job.items.map(i => [i.name, i]));
-      
-      // Start with standard items from services context
       const mergedItems = services.map(service => {
         const existing = existingMap.get(service.name);
         return existing || { name: service.name, quantity: 0, pricePerUnit: service.defaultPrice, total: 0 };
       });
-
-      // Add any custom items that were saved but are not in standard list
       job.items.forEach(item => {
         if (!services.some(s => s.name === item.name)) {
           mergedItems.push(item);
         }
       });
-      
       setJobItems(mergedItems);
     } else {
       setJobItems(initializeItems());
     }
-
     setIsEditing(true);
     setIsModalOpen(true);
   };
 
-  // Recalculate total value whenever items change
   useEffect(() => {
-    // Fix floating point errors in total sum
     const total = jobItems.reduce((acc, item) => acc + item.total, 0);
-    // Ensure final total is 2 decimals max
     const safeTotal = Number(total.toFixed(2));
     setCurrentJob(prev => ({ ...prev, value: safeTotal }));
   }, [jobItems]);
@@ -84,22 +73,15 @@ const Jobs: React.FC = () => {
   const handleItemChange = (index: number, field: 'quantity' | 'pricePerUnit' | 'name', value: string | number) => {
     const newItems = [...jobItems];
     const item = newItems[index];
-    
     if (field === 'name') {
         item.name = value as string;
     } else {
-        // Handle number inputs (allow decimals)
         const numValue = typeof value === 'string' ? parseFloat(value) : value;
-        // Avoid NaN if field is empty
         const safeValue = isNaN(numValue) ? 0 : numValue;
-        
         if (field === 'quantity') item.quantity = safeValue;
         if (field === 'pricePerUnit') item.pricePerUnit = safeValue;
-        
-        // Recalculate total line with 2 decimal precision
         item.total = Number((item.quantity * item.pricePerUnit).toFixed(2));
     }
-    
     setJobItems(newItems);
   };
 
@@ -108,8 +90,7 @@ const Jobs: React.FC = () => {
   };
 
   const removeItem = (index: number) => {
-    const newItems = jobItems.filter((_, i) => i !== index);
-    setJobItems(newItems);
+    setJobItems(jobItems.filter((_, i) => i !== index));
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -123,11 +104,27 @@ const Jobs: React.FC = () => {
     }
   };
 
+  const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type === 'application/pdf') {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCurrentJob(prev => ({ 
+          ...prev, 
+          pdfUrl: reader.result as string,
+          pdfName: file.name
+        }));
+      };
+      reader.readAsDataURL(file);
+    } else if (file) {
+      alert("Por favor, selecione um arquivo PDF.");
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentJob.clientName || !currentJob.installerId) return;
 
-    // Filter out items with 0 total unless they have a name (custom item in progress)
     const activeItems = jobItems.filter(item => item.name.trim() !== '' && (item.quantity > 0 || item.pricePerUnit > 0));
 
     const jobData: Job = {
@@ -143,7 +140,9 @@ const Jobs: React.FC = () => {
         installerId: currentJob.installerId!,
         notes: currentJob.notes || '',
         items: activeItems,
-        photoUrl: currentJob.photoUrl
+        photoUrl: currentJob.photoUrl,
+        pdfUrl: currentJob.pdfUrl,
+        pdfName: currentJob.pdfName
     };
 
     if (isEditing) {
@@ -178,7 +177,6 @@ const Jobs: React.FC = () => {
         </button>
       </div>
 
-      {/* Filter Bar */}
       <div className="bg-white p-4 rounded-lg shadow-sm flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -196,7 +194,6 @@ const Jobs: React.FC = () => {
         </button>
       </div>
 
-      {/* Job List */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -255,7 +252,6 @@ const Jobs: React.FC = () => {
         </div>
       </div>
 
-      {/* Modal Form */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg w-full max-w-5xl shadow-xl animate-fade-in flex flex-col max-h-[95vh]">
@@ -269,7 +265,6 @@ const Jobs: React.FC = () => {
             </div>
             
             <form onSubmit={handleSubmit} className="flex flex-col md:flex-row h-full overflow-hidden">
-              {/* LEFT COLUMN: Basic Info */}
               <div className="p-6 md:w-1/3 border-r overflow-y-auto space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Nome do Cliente</label>
@@ -341,7 +336,6 @@ const Jobs: React.FC = () => {
                     </select>
                   </div>
 
-                  {/* Ordem de Serviço & Foto Area */}
                   <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 mt-4">
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Ordem de Serviço (OS)</label>
                     
@@ -353,11 +347,17 @@ const Jobs: React.FC = () => {
                       onChange={e => setCurrentJob({...currentJob, description: e.target.value})}
                     />
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col gap-2">
                        <label className="cursor-pointer bg-white border border-gray-400 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-md shadow-sm text-sm flex items-center justify-center w-full">
                           <Upload size={16} className="mr-2" />
                           {currentJob.photoUrl ? 'Trocar Foto' : 'Adicionar Foto'}
                           <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                       </label>
+                       
+                       <label className="cursor-pointer bg-white border border-gray-400 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-md shadow-sm text-sm flex items-center justify-center w-full">
+                          <FileText size={16} className="mr-2" />
+                          {currentJob.pdfUrl ? 'Trocar PDF' : 'Adicionar PDF'}
+                          <input type="file" accept="application/pdf" className="hidden" onChange={handlePdfUpload} />
                        </label>
                     </div>
 
@@ -373,10 +373,31 @@ const Jobs: React.FC = () => {
                         </button>
                       </div>
                     )}
+
+                    {currentJob.pdfUrl && (
+                      <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded-md flex items-center justify-between">
+                         <div className="flex items-center gap-2 overflow-hidden">
+                            <FileText size={20} className="text-blue-600 shrink-0" />
+                            <span className="text-xs text-blue-800 font-medium truncate">{currentJob.pdfName || 'documento.pdf'}</span>
+                         </div>
+                         <div className="flex items-center gap-1">
+                            <a href={currentJob.pdfUrl} target="_blank" rel="noopener noreferrer" className="p-1 text-blue-600 hover:bg-blue-100 rounded" title="Visualizar">
+                               <Eye size={16} />
+                            </a>
+                            <button 
+                              type="button"
+                              onClick={() => setCurrentJob({...currentJob, pdfUrl: '', pdfName: ''})}
+                              className="p-1 text-red-600 hover:bg-red-50 rounded"
+                              title="Remover"
+                            >
+                               <Trash2 size={16} />
+                            </button>
+                         </div>
+                      </div>
+                    )}
                   </div>
               </div>
 
-              {/* RIGHT COLUMN: Items Calculator */}
               <div className="p-6 md:w-2/3 flex flex-col bg-gray-50">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
@@ -447,7 +468,6 @@ const Jobs: React.FC = () => {
                                   type="button"
                                   onClick={() => removeItem(index)}
                                   className="text-red-400 hover:text-red-600 transition-colors p-2 rounded-full hover:bg-red-50"
-                                  title="Remover item"
                                 >
                                   <Trash2 size={16} />
                                 </button>
@@ -458,7 +478,6 @@ const Jobs: React.FC = () => {
                     </table>
                   </div>
 
-                  {/* Total Footer */}
                   <div className="mt-4 p-4 bg-white rounded-lg shadow border border-gray-200 flex justify-between items-center">
                     <span className="text-lg font-medium text-gray-600">Valor Total da Obra:</span>
                     <span className="text-3xl font-bold text-primary">

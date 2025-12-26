@@ -46,8 +46,10 @@ export interface Job {
   status: JobStatus;
   paymentStatus: PaymentStatus;
   installerId: string;
-  items?: JobItem[]; // Detailed items
+  items?: JobItem[]; 
   photoUrl?: string; // Base64 string for the photo
+  pdfUrl?: string;   // Base64 or URL string for PDF
+  pdfName?: string;  // Name of the uploaded file
   notes?: string;
 }
 

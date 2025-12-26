@@ -6,24 +6,21 @@ import {
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Job, JobStatus, PaymentStatus, JobItem } from '../types';
-import { ChevronLeft, ChevronRight, Plus, X, Calendar as CalendarIcon, Save, Calculator, Trash2, Upload } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, X, Calendar as CalendarIcon, Save, Calculator, Trash2, Upload, FileText, Eye } from 'lucide-react';
 
 const Calendar: React.FC = () => {
   const { jobs, installers, services, addJob, updateJob, deleteJob } = useApp();
   const [currentDate, setCurrentDate] = useState(new Date());
   
-  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<Partial<Job> | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<{date: Date, installerId: string} | null>(null);
   const [jobItems, setJobItems] = useState<JobItem[]>([]);
 
-  // Calendar Generation
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
   const calendarDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
-  // Helpers
   const handlePrevMonth = () => setCurrentDate(subMonths(currentDate, 1));
   const handleNextMonth = () => setCurrentDate(addMonths(currentDate, 1));
 
@@ -54,14 +51,11 @@ const Calendar: React.FC = () => {
 
   const prepareItemsForJob = (job?: Job) => {
     if (job && job.items && job.items.length > 0) {
-      // Create a map of existing items
       const existingMap = new Map(job.items.map(i => [i.name, i]));
-      
       const mergedItems = services.map(service => {
         const existing = existingMap.get(service.name);
         return existing || { name: service.name, quantity: 0, pricePerUnit: service.defaultPrice, total: 0 };
       });
-      // Add custom items
       job.items.forEach(item => {
         if (!services.some(s => s.name === item.name)) {
           mergedItems.push(item);
@@ -73,14 +67,15 @@ const Calendar: React.FC = () => {
     }
   };
 
-  // Interaction Handlers
   const handleCellClick = (date: Date, installerId: string) => {
     setSelectedSlot({ date, installerId });
     setEditingJob({
       status: JobStatus.SCHEDULED,
       paymentStatus: PaymentStatus.PENDING,
       value: 0,
-      photoUrl: ''
+      photoUrl: '',
+      pdfUrl: '',
+      pdfName: ''
     });
     setJobItems(initializeItems());
     setIsModalOpen(true);
@@ -105,7 +100,21 @@ const Calendar: React.FC = () => {
     }
   };
 
-  // Recalculate total
+  const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type === 'application/pdf') {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setEditingJob(prev => prev ? ({ 
+          ...prev, 
+          pdfUrl: reader.result as string,
+          pdfName: file.name
+        }) : null);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   useEffect(() => {
     if (isModalOpen && editingJob) {
       const total = jobItems.reduce((acc, item) => acc + item.total, 0);
@@ -117,19 +126,15 @@ const Calendar: React.FC = () => {
   const handleItemChange = (index: number, field: 'quantity' | 'pricePerUnit' | 'name', value: string | number) => {
     const newItems = [...jobItems];
     const item = newItems[index];
-    
     if (field === 'name') {
         item.name = value as string;
     } else {
         const numValue = typeof value === 'string' ? parseFloat(value) : value;
         const safeValue = isNaN(numValue) ? 0 : numValue;
-        
         if (field === 'quantity') item.quantity = safeValue;
         if (field === 'pricePerUnit') item.pricePerUnit = safeValue;
-        
         item.total = Number((item.quantity * item.pricePerUnit).toFixed(2));
     }
-    
     setJobItems(newItems);
   };
 
@@ -138,27 +143,25 @@ const Calendar: React.FC = () => {
   };
 
   const removeItem = (index: number) => {
-    const newItems = jobItems.filter((_, i) => i !== index);
-    setJobItems(newItems);
+    setJobItems(jobItems.filter((_, i) => i !== index));
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingJob) return;
 
-    // Filter active items
     const activeItems = jobItems.filter(item => item.name.trim() !== '' && (item.quantity > 0 || item.pricePerUnit > 0));
 
     if (editingJob.id) {
-      // Update existing
       updateJob({
           ...editingJob as Job,
           items: activeItems,
           value: Number(editingJob.value?.toFixed(2)),
-          photoUrl: editingJob.photoUrl
+          photoUrl: editingJob.photoUrl,
+          pdfUrl: editingJob.pdfUrl,
+          pdfName: editingJob.pdfName
       });
     } else if (selectedSlot) {
-      // Create new
       const newJob: Job = {
         id: Date.now().toString(),
         installerId: selectedSlot.installerId,
@@ -172,7 +175,9 @@ const Calendar: React.FC = () => {
         address: '',
         notes: '',
         items: activeItems,
-        photoUrl: editingJob.photoUrl
+        photoUrl: editingJob.photoUrl,
+        pdfUrl: editingJob.pdfUrl,
+        pdfName: editingJob.pdfName
       };
       addJob(newJob);
     }
@@ -190,7 +195,6 @@ const Calendar: React.FC = () => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-100px)]">
-      {/* Header */}
       <div className="flex justify-between items-center mb-4 bg-white p-4 rounded-lg shadow-sm">
         <div className="flex items-center gap-4">
           <h2 className="text-2xl font-bold text-gray-800 capitalize flex items-center gap-2">
@@ -211,7 +215,6 @@ const Calendar: React.FC = () => {
         </div>
       </div>
 
-      {/* Spreadsheet / Matrix View */}
       <div className="flex-1 overflow-auto bg-white shadow rounded-lg border border-black relative">
         <table className="min-w-full border-collapse">
           <thead className="bg-gray-100 sticky top-0 z-10 shadow-sm">
@@ -231,16 +234,12 @@ const Calendar: React.FC = () => {
             {calendarDays.map((day) => {
               const isWeekendDay = isWeekend(day);
               const rowClass = isWeekendDay ? 'bg-slate-50' : 'bg-white';
-              
               return (
                 <tr key={day.toISOString()} className={rowClass}>
-                  {/* Date Column (Sticky) */}
                   <td className={`p-3 text-sm border-r border-b border-black sticky left-0 z-10 ${rowClass} font-medium text-gray-900`}>
                     <div className="capitalize">{format(day, 'EEEE', { locale: ptBR })}</div>
                     <div className="text-xs text-gray-600">{format(day, "d 'de' MMMM 'de' yyyy", { locale: ptBR })}</div>
                   </td>
-
-                  {/* Installer Columns */}
                   {installers.filter(i => i.active).map(installer => {
                     const cellJobs = getJobsForCell(day, installer.id);
                     return (
@@ -250,23 +249,17 @@ const Calendar: React.FC = () => {
                         onClick={() => handleCellClick(day, installer.id)}
                       >
                         <div className="min-h-[60px] flex flex-col gap-1">
-                          {cellJobs.length > 0 ? (
-                            cellJobs.map(job => (
-                              <div 
-                                key={job.id}
-                                onClick={(e) => handleJobClick(e, job)}
-                                className={`p-2 text-xs shadow-sm rounded cursor-pointer hover:opacity-90 transition-opacity border ${getStatusStyle(job.status)}`}
-                              >
-                                <div className="font-bold truncate">{job.clientName}</div>
-                                <div className="truncate opacity-90">{job.orderNumber}</div>
-                                {job.value > 0 && <div className="mt-1 font-mono opacity-75">R$ {job.value.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>}
-                              </div>
-                            ))
-                          ) : (
-                            <div className="h-full w-full flex items-center justify-center opacity-0 group-hover:opacity-100">
-                              <Plus size={16} className="text-blue-300" />
+                          {cellJobs.map(job => (
+                            <div 
+                              key={job.id}
+                              onClick={(e) => handleJobClick(e, job)}
+                              className={`p-2 text-xs shadow-sm rounded cursor-pointer hover:opacity-90 transition-opacity border ${getStatusStyle(job.status)}`}
+                            >
+                              <div className="font-bold truncate">{job.clientName}</div>
+                              <div className="truncate opacity-90">{job.orderNumber}</div>
+                              {job.value > 0 && <div className="mt-1 font-mono opacity-75">R$ {job.value.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>}
                             </div>
-                          )}
+                          ))}
                         </div>
                       </td>
                     );
@@ -278,7 +271,6 @@ const Calendar: React.FC = () => {
         </table>
       </div>
 
-      {/* Edit/Create Modal with Calculator */}
       {isModalOpen && editingJob && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-60 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-xl w-full max-w-5xl shadow-2xl animate-fade-in flex flex-col max-h-[95vh]">
@@ -287,12 +279,6 @@ const Calendar: React.FC = () => {
                 <h3 className="text-xl font-bold text-gray-800">
                   {editingJob.id ? 'Editar Agendamento' : 'Novo Agendamento'}
                 </h3>
-                <p className="text-sm text-gray-500">
-                   {selectedSlot 
-                      ? `${format(selectedSlot.date, "dd 'de' MMMM", { locale: ptBR })} - ${installers.find(i => i.id === selectedSlot.installerId)?.name}`
-                      : `${format(new Date(editingJob.date!), "dd/MM/yyyy HH:mm")} - ${installers.find(i => i.id === editingJob.installerId)?.name}`
-                   }
-                </p>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded-full">
                 <X size={24} />
@@ -300,18 +286,14 @@ const Calendar: React.FC = () => {
             </div>
             
             <form onSubmit={handleSave} className="flex flex-col md:flex-row h-full overflow-hidden">
-               {/* Left Side: Details */}
                <div className="p-6 md:w-1/3 border-r overflow-y-auto space-y-4">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Cliente / Obra</label>
                     <input 
-                      autoFocus
-                      required
-                      type="text" 
+                      autoFocus required type="text" 
                       className="w-full bg-white text-gray-900 border border-gray-400 rounded-lg p-2.5 focus:ring-2 focus:ring-primary focus:border-primary transition-shadow"
                       value={editingJob.clientName || ''}
                       onChange={e => setEditingJob({...editingJob, clientName: e.target.value})}
-                      placeholder="Nome do cliente ou local"
                     />
                   </div>
 
@@ -322,7 +304,6 @@ const Calendar: React.FC = () => {
                       className="w-full bg-white text-gray-900 border border-gray-400 rounded-lg p-2.5"
                       value={editingJob.orderNumber || ''}
                       onChange={e => setEditingJob({...editingJob, orderNumber: e.target.value})}
-                      placeholder="Ex: 19537"
                     />
                   </div>
                   
@@ -331,8 +312,7 @@ const Calendar: React.FC = () => {
                     <div className="grid grid-cols-2 gap-2">
                       {Object.values(JobStatus).map(status => (
                         <button
-                          key={status}
-                          type="button"
+                          key={status} type="button"
                           onClick={() => setEditingJob({...editingJob, status: status})}
                           className={`px-2 py-2 text-xs rounded-md border text-center transition-colors
                             ${editingJob.status === status 
@@ -357,10 +337,8 @@ const Calendar: React.FC = () => {
                     </select>
                   </div>
 
-                  {/* Ordem de Serviço & Foto Area */}
                   <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 mt-4">
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Ordem de Serviço</label>
-                    
                     <textarea 
                       rows={2}
                       className="w-full bg-white text-gray-900 border border-gray-400 rounded-md p-2 text-sm mb-3"
@@ -369,11 +347,17 @@ const Calendar: React.FC = () => {
                       placeholder="Detalhes da OS..."
                     />
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col gap-2">
                        <label className="cursor-pointer bg-white border border-gray-400 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-md shadow-sm text-sm flex items-center justify-center w-full">
                           <Upload size={16} className="mr-2" />
                           {editingJob.photoUrl ? 'Trocar Foto' : 'Adicionar Foto'}
                           <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                       </label>
+                       
+                       <label className="cursor-pointer bg-white border border-gray-400 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-md shadow-sm text-sm flex items-center justify-center w-full">
+                          <FileText size={16} className="mr-2" />
+                          {editingJob.pdfUrl ? 'Trocar PDF' : 'Adicionar PDF'}
+                          <input type="file" accept="application/pdf" className="hidden" onChange={handlePdfUpload} />
                        </label>
                     </div>
 
@@ -389,10 +373,30 @@ const Calendar: React.FC = () => {
                         </button>
                       </div>
                     )}
+
+                    {editingJob.pdfUrl && (
+                      <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded-md flex items-center justify-between">
+                         <div className="flex items-center gap-2 overflow-hidden">
+                            <FileText size={20} className="text-blue-600 shrink-0" />
+                            <span className="text-xs text-blue-800 font-medium truncate">{editingJob.pdfName || 'anexo.pdf'}</span>
+                         </div>
+                         <div className="flex items-center gap-1">
+                            <a href={editingJob.pdfUrl} target="_blank" rel="noopener noreferrer" className="p-1 text-blue-600 hover:bg-blue-100 rounded">
+                               <Eye size={16} />
+                            </a>
+                            <button 
+                              type="button"
+                              onClick={() => setEditingJob({...editingJob, pdfUrl: '', pdfName: ''})}
+                              className="p-1 text-red-600 hover:bg-red-50 rounded"
+                            >
+                               <Trash2 size={16} />
+                            </button>
+                         </div>
+                      </div>
+                    )}
                   </div>
                </div>
 
-               {/* Right Side: Calculator */}
                <div className="p-6 md:w-2/3 flex flex-col bg-gray-50">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
@@ -400,8 +404,7 @@ const Calendar: React.FC = () => {
                       <h4 className="text-lg font-bold text-gray-800">Calculadora de Serviços</h4>
                     </div>
                     <button 
-                      type="button"
-                      onClick={addItem}
+                      type="button" onClick={addItem}
                       className="flex items-center text-sm bg-green-50 text-green-600 px-3 py-1 rounded hover:bg-green-100 border border-green-200"
                     >
                       <Plus size={16} className="mr-1" />
@@ -421,89 +424,59 @@ const Calendar: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
-                        {jobItems.map((item, index) => {
-                           // Allow editing of standard item names as well
-                          return (
+                        {jobItems.map((item, index) => (
                           <tr key={index} className="hover:bg-blue-50/30">
-                            <td className="px-3 py-1 text-sm font-medium text-gray-700">
+                            <td className="px-3 py-1">
                                 <input
                                   type="text"
-                                  className="w-full bg-white text-gray-900 border border-gray-400 rounded-md text-xs p-2 shadow-sm focus:ring-2 focus:ring-primary focus:border-primary font-medium placeholder-gray-500"
+                                  className="w-full bg-white text-gray-900 border border-gray-400 rounded-md text-xs p-2"
                                   value={item.name}
-                                  placeholder="Nome"
                                   onChange={e => handleItemChange(index, 'name', e.target.value)}
                                 />
                             </td>
                             <td className="px-2 py-1">
                               <input 
-                                type="number" 
-                                min="0"
-                                step="0.01"
-                                className="w-full bg-white text-gray-900 border border-gray-400 rounded-md text-center text-xs p-2 shadow-sm focus:ring-2 focus:ring-primary focus:border-primary font-medium placeholder-gray-500"
+                                type="number" step="0.01"
+                                className="w-full bg-white text-gray-900 border border-gray-400 rounded-md text-center text-xs p-2"
                                 value={item.quantity || ''}
                                 onChange={e => handleItemChange(index, 'quantity', e.target.value)}
-                                placeholder="0"
                               />
                             </td>
                             <td className="px-2 py-1">
                               <input 
-                                type="number" 
-                                min="0"
-                                step="0.01"
-                                className="w-full bg-white text-gray-900 border border-gray-400 rounded-md text-center text-xs p-2 shadow-sm focus:ring-2 focus:ring-primary focus:border-primary font-medium placeholder-gray-500"
+                                type="number" step="0.01"
+                                className="w-full bg-white text-gray-900 border border-gray-400 rounded-md text-center text-xs p-2"
                                 value={item.pricePerUnit || ''}
                                 onChange={e => handleItemChange(index, 'pricePerUnit', e.target.value)}
-                                placeholder="0"
                               />
                             </td>
-                            <td className="px-3 py-1 text-right text-sm font-bold text-gray-900 bg-gray-50/50 flex items-center justify-end h-full mt-1.5">
-                              R$ {item.total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            <td className="px-3 py-1 text-right text-sm font-bold text-gray-900">
+                              R$ {item.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </td>
                              <td className="px-1 py-1 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => removeItem(index)}
-                                  className="text-red-400 hover:text-red-600 transition-colors p-2 rounded-full hover:bg-red-50"
-                                >
+                                <button type="button" onClick={() => removeItem(index)} className="text-red-400 hover:text-red-600 p-2">
                                   <Trash2 size={14} />
                                 </button>
                             </td>
                           </tr>
-                        )})}
+                        ))}
                       </tbody>
                     </table>
                   </div>
 
-                  {/* Total & Actions */}
                   <div className="mt-4 pt-2 border-t flex items-center justify-between">
                      <span className="font-medium text-gray-600">Total:</span>
-                     <span className="text-2xl font-bold text-primary">R$ {Number(editingJob.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                     <span className="text-2xl font-bold text-primary">R$ {Number(editingJob.value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                   </div>
 
                   <div className="flex gap-3 mt-4">
-                     {editingJob.id && (
-                        <button 
-                          type="button"
-                          onClick={handleDelete}
-                          className="px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg font-medium"
-                        >
-                          Excluir
-                        </button>
+                      {editingJob.id && (
+                        <button type="button" onClick={handleDelete} className="px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg font-medium">Excluir</button>
                       )}
                       <div className="flex-1"></div>
-                      <button 
-                        type="button" 
-                        onClick={() => setIsModalOpen(false)}
-                        className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium"
-                      >
-                        Cancelar
-                      </button>
-                      <button 
-                        type="submit" 
-                        className="px-6 py-2 bg-primary text-white rounded-lg font-medium hover:bg-blue-700 shadow-sm flex items-center"
-                      >
-                        <Save size={18} className="mr-2" />
-                        Salvar
+                      <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium">Cancelar</button>
+                      <button type="submit" className="px-6 py-2 bg-primary text-white rounded-lg font-medium hover:bg-blue-700 shadow-sm flex items-center">
+                        <Save size={18} className="mr-2" /> Salvar
                       </button>
                   </div>
                </div>

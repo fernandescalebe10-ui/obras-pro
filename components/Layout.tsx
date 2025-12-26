@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Grapisos from '../images/Granpisos.jpeg';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -53,9 +54,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <div className="flex items-center w-full gap-3">
             {/* Logo Container - Rounded Square for full image visibility */}
             <div className="bg-white h-14 w-14 rounded-lg flex items-center justify-center shrink-0 shadow-lg overflow-hidden p-1">
-              <img 
-                src="../images/Granpisos.jpeg" 
-                alt="Logo" 
+              <img
+                src={Grapisos}
+                alt="Grapisos"
                 className="h-full w-full object-contain"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';

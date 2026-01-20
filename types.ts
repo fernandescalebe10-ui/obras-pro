@@ -1,4 +1,9 @@
 
+export interface City {
+  id: number;
+  name: string;
+}
+
 export enum JobStatus {
   SCHEDULED = 'Agendada',
   IN_PROGRESS = 'Em andamento',
@@ -12,8 +17,17 @@ export enum PaymentStatus {
   LATE = 'Atrasado'
 }
 
+export interface User {
+  id: number;
+  name: string;
+  email: string;
+  password?: string; // Simulação de senha para o login
+  cityId: number;
+}
+
 export interface Installer {
   id: string;
+  cityId: number; // Chave estrangeira para City
   name: string;
   phone: string;
   specialty: string;
@@ -24,6 +38,7 @@ export interface Installer {
 
 export interface ServiceDefinition {
   id: string;
+  cityId: number; // Chave estrangeira para City
   name: string;
   defaultPrice: number;
 }
@@ -37,19 +52,20 @@ export interface JobItem {
 
 export interface Job {
   id: string;
+  cityId: number; // Chave estrangeira para City
   orderNumber: string;
   clientName: string;
   address: string;
-  date: string; // ISO String
-  description: string; // Used as Service Order details
+  date: string; 
+  description: string;
   value: number;
   status: JobStatus;
   paymentStatus: PaymentStatus;
   installerId: string;
   items?: JobItem[]; 
-  photoUrl?: string; // Base64 string for the photo
-  pdfUrl?: string;   // Base64 or URL string for PDF
-  pdfName?: string;  // Name of the uploaded file
+  photoUrl?: string;
+  pdfUrl?: string;
+  pdfName?: string;
   notes?: string;
 }
 

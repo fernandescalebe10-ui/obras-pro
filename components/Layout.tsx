@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import Grapisos from '../images/Granpisos.jpeg';
 import { Link, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { useApp } from '../context/AppContext';
 import { 
   LayoutDashboard, 
   CalendarDays, 
@@ -31,6 +33,15 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   ];
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+
+  const { logout } = useApp();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    try { localStorage.removeItem('session_user'); } catch {}
+    navigate('/login', { replace: true });
+  };
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden">
@@ -97,7 +108,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         </nav>
 
         <div className="p-4 border-t border-slate-700">
-          <button className="flex items-center w-full px-4 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
+          <button onClick={handleLogout} className="flex items-center w-full px-4 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
             <LogOut size={18} className="mr-3" />
             Sair do Sistema
           </button>

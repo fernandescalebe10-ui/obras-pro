@@ -1,10 +1,12 @@
+
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { ServiceDefinition } from '../types';
 import { Plus, Edit, Trash2, X, Save, DollarSign, Wrench } from 'lucide-react';
 
 const Services: React.FC = () => {
-  const { services, addService, updateService, deleteService } = useApp();
+  // Added user to destructuring to provide cityId for new service definitions
+  const { services, addService, updateService, deleteService, user } = useApp();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentService, setCurrentService] = useState<Partial<ServiceDefinition>>({
@@ -26,10 +28,12 @@ const Services: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentService.name) return;
+    // Added user validation to ensure cityId is available for construction
+    if (!currentService.name || !user) return;
 
     const serviceData: ServiceDefinition = {
       id: isEditing && currentService.id ? currentService.id : Date.now().toString(),
+      cityId: user.cityId, // Injected cityId from current user context
       name: currentService.name,
       defaultPrice: Number(currentService.defaultPrice) || 0
     };
@@ -130,7 +134,7 @@ const Services: React.FC = () => {
                   <input 
                     type="text" 
                     required
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-primary focus:border-primary"
+                    className="mt-1 block w-full bg-white border border-gray-400 rounded-md shadow-sm p-2 focus:ring-primary focus:border-primary text-gray-900"
                     value={currentService.name}
                     onChange={e => setCurrentService({...currentService, name: e.target.value})}
                     placeholder="Ex: Instalação de Rodapé"
@@ -148,7 +152,7 @@ const Services: React.FC = () => {
                       min="0"
                       step="0.01"
                       required
-                      className="block w-full border border-gray-300 rounded-md p-2 pl-10 focus:ring-primary focus:border-primary"
+                      className="block w-full bg-white border border-gray-400 rounded-md p-2 pl-10 focus:ring-primary focus:border-primary text-gray-900"
                       value={currentService.defaultPrice}
                       onChange={e => setCurrentService({...currentService, defaultPrice: parseFloat(e.target.value)})}
                       placeholder="0.00"
@@ -167,7 +171,7 @@ const Services: React.FC = () => {
                   </button>
                   <button 
                     type="submit" 
-                    className="w-full bg-primary text-white py-2 rounded-md hover:bg-blue-700 shadow-sm font-medium flex justify-center items-center"
+                    className="w-full bg-primary text-white py-2 rounded-md hover:bg-blue-700 shadow-sm font-bold flex justify-center items-center"
                   >
                     <Save size={18} className="mr-2" />
                     Salvar

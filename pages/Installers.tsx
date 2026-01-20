@@ -1,10 +1,12 @@
+
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Installer, JobStatus } from '../types';
 import { User, Phone, Briefcase, ChevronRight, Plus, X, Edit, Trash2, Save, Upload, Banknote } from 'lucide-react';
 
 const Installers: React.FC = () => {
-  const { installers, jobs, addInstaller, updateInstaller, deleteInstaller } = useApp();
+  // Added user to destructuring to inject cityId for new records
+  const { installers, jobs, addInstaller, updateInstaller, deleteInstaller, user } = useApp();
   const [selectedInstaller, setSelectedInstaller] = useState<Installer | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -48,10 +50,12 @@ const Installers: React.FC = () => {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name) return;
+    // Added user validation and cityId injection
+    if (!formData.name || !user) return;
 
     const installerData: Installer = {
       id: isEditing && formData.id ? formData.id : Date.now().toString(),
+      cityId: user.cityId, // Injected missing cityId property from current user context
       name: formData.name!,
       phone: formData.phone || '',
       specialty: formData.specialty || '',
@@ -248,7 +252,7 @@ const Installers: React.FC = () => {
             <form onSubmit={handleSave} className="space-y-4">
                {/* Photo Upload */}
               <div className="flex flex-col items-center justify-center mb-4">
-                <div className="h-24 w-24 rounded-full bg-slate-100 border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden relative group cursor-pointer hover:border-primary">
+                <div className="h-24 w-24 rounded-full bg-white border-2 border-dashed border-gray-400 flex items-center justify-center overflow-hidden relative group cursor-pointer hover:border-primary">
                     {formData.photoUrl ? (
                       <img src={formData.photoUrl} className="h-full w-full object-cover" alt="Preview" />
                     ) : (
@@ -269,7 +273,7 @@ const Installers: React.FC = () => {
                 <input 
                   required 
                   type="text" 
-                  className="w-full border border-gray-300 rounded-md p-2 mt-1 focus:ring-primary focus:border-primary" 
+                  className="w-full bg-white border border-gray-400 rounded-md p-2 mt-1 focus:ring-primary focus:border-primary text-gray-900 shadow-sm" 
                   value={formData.name || ''} 
                   onChange={e => setFormData({...formData, name: e.target.value})} 
                 />
@@ -279,7 +283,7 @@ const Installers: React.FC = () => {
                 <input 
                   required 
                   type="text" 
-                  className="w-full border border-gray-300 rounded-md p-2 mt-1 focus:ring-primary focus:border-primary" 
+                  className="w-full bg-white border border-gray-400 rounded-md p-2 mt-1 focus:ring-primary focus:border-primary text-gray-900 shadow-sm" 
                   value={formData.phone || ''} 
                   onChange={e => setFormData({...formData, phone: e.target.value})} 
                 />
@@ -288,7 +292,7 @@ const Installers: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700">Chave PIX</label>
                 <input 
                   type="text" 
-                  className="w-full border border-gray-300 rounded-md p-2 mt-1 focus:ring-primary focus:border-primary" 
+                  className="w-full bg-white border border-gray-400 rounded-md p-2 mt-1 focus:ring-primary focus:border-primary text-gray-900 shadow-sm" 
                   value={formData.pixKey || ''} 
                   onChange={e => setFormData({...formData, pixKey: e.target.value})} 
                   placeholder="CPF, Email, Telefone ou Aleatória"
@@ -299,7 +303,7 @@ const Installers: React.FC = () => {
                 <input 
                   required 
                   type="text" 
-                  className="w-full border border-gray-300 rounded-md p-2 mt-1 focus:ring-primary focus:border-primary" 
+                  className="w-full bg-white border border-gray-400 rounded-md p-2 mt-1 focus:ring-primary focus:border-primary text-gray-900 shadow-sm" 
                   placeholder="Ex: Elétrica, Hidráulica"
                   value={formData.specialty || ''} 
                   onChange={e => setFormData({...formData, specialty: e.target.value})} 
@@ -310,7 +314,7 @@ const Installers: React.FC = () => {
                 <input
                   id="active-checkbox"
                   type="checkbox"
-                  className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                  className="h-4 w-4 text-primary focus:ring-primary border-gray-400 rounded"
                   checked={formData.active}
                   onChange={e => setFormData({...formData, active: e.target.checked})}
                 />
@@ -329,7 +333,7 @@ const Installers: React.FC = () => {
                 </button>
                 <button 
                   type="submit" 
-                  className="w-full bg-primary text-white py-2 rounded-md hover:bg-blue-700 flex justify-center items-center"
+                  className="w-full bg-primary text-white py-2 rounded-md hover:bg-blue-700 flex justify-center items-center font-bold"
                 >
                   <Save size={18} className="mr-2" />
                   Salvar

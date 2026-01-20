@@ -1,11 +1,25 @@
+
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { Job, Installer, JobStatus, PaymentStatus, ServiceDefinition } from '../types';
-import { INITIAL_INSTALLERS, INITIAL_JOBS, INITIAL_SERVICES } from '../constants';
+import { Job, Installer, JobStatus, PaymentStatus, ServiceDefinition, User, City } from '../types';
+import { DB_CITIES, DB_USERS, INITIAL_INSTALLERS, INITIAL_JOBS, INITIAL_SERVICES } from '../constants';
+import supabase from '../services/supabase';
 
 interface AppContextType {
+  // Dados filtrados pela cidade do usuário
   jobs: Job[];
   installers: Installer[];
   services: ServiceDefinition[];
+  
+  // Estado Global
+  user: User | null;
+  cities: City[];
+  isAuthenticated: boolean;
+  
+  // Ações
+  login: (email: string, password: string) => Promise<boolean>;
+  logout: () => void;
+  
+  // CRUDs (Sempre injetando o cityId do usuário logado)
   addJob: (job: Job) => void;
   updateJob: (job: Job) => void;
   deleteJob: (id: string) => void;
@@ -21,75 +35,369 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  // Simulate database with local state. In a real app, this would be an API call.
-  const [jobs, setJobs] = useState<Job[]>(() => {
-    const saved = localStorage.getItem('app_jobs');
+  // "Tabelas" Globais no LocalStorage
+  const [allJobs, setAllJobs] = useState<Job[]>(() => {
+    const saved = localStorage.getItem('db_jobs');
     return saved ? JSON.parse(saved) : INITIAL_JOBS;
   });
 
-  const [installers, setInstallers] = useState<Installer[]>(() => {
-    const saved = localStorage.getItem('app_installers');
+  const [allInstallers, setAllInstallers] = useState<Installer[]>(() => {
+    const saved = localStorage.getItem('db_installers');
     return saved ? JSON.parse(saved) : INITIAL_INSTALLERS;
   });
 
-  const [services, setServices] = useState<ServiceDefinition[]>(() => {
-    const saved = localStorage.getItem('app_services');
+  const [allServices, setAllServices] = useState<ServiceDefinition[]>(() => {
+    const saved = localStorage.getItem('db_services');
     return saved ? JSON.parse(saved) : INITIAL_SERVICES;
   });
 
-  // Persist to localStorage
+  // Carrega dados do Supabase ao montar (se disponível) e mapeia para os tipos locais
   useEffect(() => {
-    localStorage.setItem('app_jobs', JSON.stringify(jobs));
-  }, [jobs]);
+    const loadFromSupabase = async () => {
+      try {
+        // Installers
+        const { data: installersData, error: installersError } = await supabase.from('installers').select('*');
+        if (installersError) console.warn('Supabase installers error', installersError);
+        if (installersData) {
+          const mapped = installersData.map((r: any) => ({
+            id: r.id,
+            cityId: r.cityId ? Number(r.cityId) : 1,
+            name: r.name || '',
+            phone: r.phone || '',
+            specialty: r.specialty || '',
+            active: r.active === undefined ? true : !!r.active,
+            photoUrl: r.photoUrl,
+            pixKey: r.pixKey
+          } as Installer));
+          setAllInstallers(mapped);
+        }
 
+        // Services
+        const { data: servicesData, error: servicesError } = await supabase.from('services').select('*');
+        if (servicesError) console.warn('Supabase services error', servicesError);
+        if (servicesData) {
+          const mapped = servicesData.map((r: any) => ({
+            id: r.id,
+            cityId: r.cityId ? Number(r.cityId) : 1,
+            name: r.name || '',
+            defaultPrice: r.defaultPrice !== undefined ? Number(r.defaultPrice) : 0
+          } as ServiceDefinition));
+          setAllServices(mapped);
+        }
+
+        // Jobs
+        const { data: jobsData, error: jobsError } = await supabase.from('jobs').select('*');
+        if (jobsError) console.warn('Supabase jobs error', jobsError);
+        if (jobsData) {
+          const mapped = jobsData.map((r: any) => ({
+            id: r.id,
+            cityId: r.cityId ? Number(r.cityId) : 1,
+            orderNumber: r.orderNumber || '',
+            clientName: r.clientName || '',
+            address: r.address || '',
+            date: r.date ? new Date(r.date).toISOString() : new Date().toISOString(),
+            description: r.description || '',
+            value: r.value !== undefined ? Number(r.value) : 0,
+            status: (r.status as JobStatus) || JobStatus.SCHEDULED,
+            paymentStatus: (r.paymentStatus as PaymentStatus) || PaymentStatus.PENDING,
+            installerId: r.installerId || '',
+            items: r.items || undefined,
+            photoUrl: r.photoUrl || undefined,
+            pdfUrl: r.pdfUrl || undefined,
+            pdfName: r.pdfName || undefined,
+            notes: r.notes || undefined
+          } as Job));
+          setAllJobs(mapped);
+        }
+      } catch (err) {
+        console.warn('Error loading from Supabase', err);
+      }
+    };
+
+    loadFromSupabase();
+  }, []);
+
+  const [user, setUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem('session_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  // Persistência das "Tabelas"
+  useEffect(() => localStorage.setItem('db_jobs', JSON.stringify(allJobs)), [allJobs]);
+  useEffect(() => localStorage.setItem('db_installers', JSON.stringify(allInstallers)), [allInstallers]);
+  useEffect(() => localStorage.setItem('db_services', JSON.stringify(allServices)), [allServices]);
   useEffect(() => {
-    localStorage.setItem('app_installers', JSON.stringify(installers));
-  }, [installers]);
+    if (user) localStorage.setItem('session_user', JSON.stringify(user));
+    else localStorage.removeItem('session_user');
+  }, [user]);
 
-  useEffect(() => {
-    localStorage.setItem('app_services', JSON.stringify(services));
-  }, [services]);
+  // Filtros Relacionais baseados no Usuário Logado
+  const jobs = allJobs.filter(j => j.cityId === user?.cityId);
+  const installers = allInstallers.filter(i => i.cityId === user?.cityId);
+  const services = allServices.filter(s => s.cityId === user?.cityId);
 
+  const login = async (email: string, password: string): Promise<boolean> => {
+    // Tenta buscar usuário no Supabase (tabela `users`) e validar senha
+    try {
+      const { data, error } = await supabase.from('users').select('*').eq('email', email).maybeSingle();
+      if (!error && data) {
+        // mapear possível snake_case para camelCase
+        const dbUser: any = data;
+        const candidate: User = {
+          id: dbUser.id,
+          name: dbUser.name || dbUser.full_name || '',
+          email: dbUser.email,
+          password: dbUser.password,
+          cityId: dbUser.cityId ?? dbUser.city_id ?? 1
+        };
+        if (candidate.password && candidate.password === password) {
+          setUser(candidate);
+          return true;
+        }
+      }
+    } catch (e) {
+      console.warn('Supabase users lookup failed', e);
+    }
+
+    // Fallback para `DB_USERS` local
+    const foundUser = DB_USERS.find(u => u.email === email && u.password === password);
+    if (foundUser) {
+      setUser(foundUser);
+      return true;
+    }
+    return false;
+  };
+
+  const logout = () => setUser(null);
+
+  // CRUD Helpers com injeção de CityId
   const addJob = (job: Job) => {
-    setJobs(prev => [job, ...prev]);
+    if (!user) return;
+    const toInsert = { ...job, cityId: user.cityId };
+    // Tenta persistir no Supabase, se falhar usa o local
+    (async () => {
+      try {
+        const payload = { ...toInsert } as any;
+        // keep cityId and installerId as-is (do not modify)
+        // Map localized enums to DB enum values
+        const mapStatusToDb = (s: any) => {
+          switch (s) {
+            case JobStatus.IN_PROGRESS: return 'IN_PROGRESS';
+            case JobStatus.FINISHED: return 'FINISHED';
+            case JobStatus.CANCELLED: return 'CANCELLED';
+            default: return 'SCHEDULED';
+          }
+        };
+        const mapPaymentToDb = (p: any) => {
+          switch (p) {
+            case PaymentStatus.PAID: return 'PAID';
+            case PaymentStatus.LATE: return 'LATE';
+            default: return 'PENDING';
+          }
+        };
+        if (payload.status !== undefined) payload.status = mapStatusToDb(payload.status);
+        if (payload.paymentStatus !== undefined) {
+          payload.paymentStatus = mapPaymentToDb(payload.paymentStatus);
+        }
+        // remover campos que não existem na tabela jobs
+        delete payload.items;
+        delete payload.photoUrl;
+        delete payload.pdfUrl;
+        delete payload.pdfName;
+        delete payload.notes;
+        const { data, error } = await supabase.from('jobs').insert([payload]).select().single();
+        if (error) {
+          console.warn('Supabase insert job failed', error);
+          setAllJobs(prev => [{ ...toInsert }, ...prev]);
+        } else {
+          setAllJobs(prev => [{ ...data }, ...prev]);
+        }
+      } catch (e) {
+        console.warn(e);
+        setAllJobs(prev => [{ ...toInsert }, ...prev]);
+      }
+    })();
   };
 
   const updateJob = (updatedJob: Job) => {
-    setJobs(prev => prev.map(j => j.id === updatedJob.id ? updatedJob : j));
+    (async () => {
+      try {
+        const payload = { ...updatedJob } as any;
+        // keep cityId and installerId as-is (do not modify)
+        // Map localized enums to DB enum values
+        const mapStatusToDb = (s: any) => {
+          switch (s) {
+            case JobStatus.IN_PROGRESS: return 'IN_PROGRESS';
+            case JobStatus.FINISHED: return 'FINISHED';
+            case JobStatus.CANCELLED: return 'CANCELLED';
+            default: return 'SCHEDULED';
+          }
+        };
+        const mapPaymentToDb = (p: any) => {
+          switch (p) {
+            case PaymentStatus.PAID: return 'PAID';
+            case PaymentStatus.LATE: return 'LATE';
+            default: return 'PENDING';
+          }
+        };
+        if (payload.status !== undefined) payload.status = mapStatusToDb(payload.status);
+        if (payload.paymentStatus !== undefined) {
+          payload.paymentStatus = mapPaymentToDb(payload.paymentStatus);
+        }
+        // remover campos que não existem na tabela jobs
+        delete payload.items;
+        delete payload.photoUrl;
+        delete payload.pdfUrl;
+        delete payload.pdfName;
+        delete payload.notes;
+        const { data, error } = await supabase.from('jobs').update(payload).eq('id', updatedJob.id).select().single();
+        if (error) {
+          console.warn('Supabase update job failed', error);
+          setAllJobs(prev => prev.map(j => j.id === updatedJob.id ? updatedJob : j));
+        } else {
+          setAllJobs(prev => prev.map(j => j.id === (data as any).id ? (data as Job) : j));
+        }
+      } catch (e) {
+        console.warn(e);
+        setAllJobs(prev => prev.map(j => j.id === updatedJob.id ? updatedJob : j));
+      }
+    })();
   };
 
   const deleteJob = (id: string) => {
-    setJobs(prev => prev.filter(j => j.id !== id));
+    (async () => {
+      try {
+        const { error } = await supabase.from('jobs').delete().eq('id', id);
+        if (error) {
+          console.warn('Supabase delete job failed', error);
+          setAllJobs(prev => prev.filter(j => j.id !== id));
+        } else {
+          setAllJobs(prev => prev.filter(j => j.id !== id));
+        }
+      } catch (e) {
+        console.warn(e);
+        setAllJobs(prev => prev.filter(j => j.id !== id));
+      }
+    })();
   };
 
   const addInstaller = (installer: Installer) => {
-    setInstallers(prev => [...prev, installer]);
+    if (!user) return;
+    const toInsert = { ...installer, cityId: user.cityId };
+    (async () => {
+      try {
+        const payload = { ...toInsert } as any;
+        // remover campos que não existem na tabela installers
+        delete payload.photoUrl;
+        delete payload.pixKey;
+        const { data, error } = await supabase.from('installers').insert([payload]).select().single();
+        if (error) {
+          console.warn('Supabase insert installer failed', error);
+          setAllInstallers(prev => [...prev, toInsert]);
+        } else {
+          setAllInstallers(prev => [...prev, data as Installer]);
+        }
+      } catch (e) {
+        console.warn(e);
+        setAllInstallers(prev => [...prev, toInsert]);
+      }
+    })();
   };
 
-  const updateInstaller = (updatedInstaller: Installer) => {
-    setInstallers(prev => prev.map(i => i.id === updatedInstaller.id ? updatedInstaller : i));
+  const updateInstaller = (updated: Installer) => {
+    (async () => {
+      try {
+        const payload = { ...updated } as any;
+        // remover campos que não existem na tabela installers
+        delete payload.photoUrl;
+        delete payload.pixKey;
+        const { data, error } = await supabase.from('installers').update(payload).eq('id', updated.id).select().single();
+        if (error) {
+          console.warn('Supabase update installer failed', error);
+          setAllInstallers(prev => prev.map(i => i.id === updated.id ? updated : i));
+        } else {
+          setAllInstallers(prev => prev.map(i => i.id === (data as any).id ? (data as Installer) : i));
+        }
+      } catch (e) {
+        console.warn(e);
+        setAllInstallers(prev => prev.map(i => i.id === updated.id ? updated : i));
+      }
+    })();
   };
 
   const deleteInstaller = (id: string) => {
-    setInstallers(prev => prev.filter(i => i.id !== id));
+    (async () => {
+      try {
+        const { error } = await supabase.from('installers').delete().eq('id', id);
+        if (error) {
+          console.warn('Supabase delete installer failed', error);
+          setAllInstallers(prev => prev.filter(i => i.id !== id));
+        } else {
+          setAllInstallers(prev => prev.filter(i => i.id !== id));
+        }
+      } catch (e) {
+        console.warn(e);
+        setAllInstallers(prev => prev.filter(i => i.id !== id));
+      }
+    })();
   };
 
   const getInstallerName = (id: string) => {
-    const inst = installers.find(i => i.id === id);
+    const inst = allInstallers.find(i => i.id === id);
     return inst ? inst.name : 'Desconhecido';
   };
 
-  // Service Operations
   const addService = (service: ServiceDefinition) => {
-    setServices(prev => [...prev, service]);
+    if (!user) return;
+    const toInsert = { ...service, cityId: user.cityId };
+    (async () => {
+      try {
+        const { data, error } = await supabase.from('services').insert([toInsert]).select().single();
+        if (error) {
+          console.warn('Supabase insert service failed', error);
+          setAllServices(prev => [...prev, toInsert]);
+        } else {
+          setAllServices(prev => [...prev, data as ServiceDefinition]);
+        }
+      } catch (e) {
+        console.warn(e);
+        setAllServices(prev => [...prev, toInsert]);
+      }
+    })();
   };
 
-  const updateService = (updatedService: ServiceDefinition) => {
-    setServices(prev => prev.map(s => s.id === updatedService.id ? updatedService : s));
+  const updateService = (updated: ServiceDefinition) => {
+    (async () => {
+      try {
+        const { data, error } = await supabase.from('services').update(updated).eq('id', updated.id).select().single();
+        if (error) {
+          console.warn('Supabase update service failed', error);
+          setAllServices(prev => prev.map(s => s.id === updated.id ? updated : s));
+        } else {
+          setAllServices(prev => prev.map(s => s.id === (data as any).id ? (data as ServiceDefinition) : s));
+        }
+      } catch (e) {
+        console.warn(e);
+        setAllServices(prev => prev.map(s => s.id === updated.id ? updated : s));
+      }
+    })();
   };
 
   const deleteService = (id: string) => {
-    setServices(prev => prev.filter(s => s.id !== id));
+    (async () => {
+      try {
+        const { error } = await supabase.from('services').delete().eq('id', id);
+        if (error) {
+          console.warn('Supabase delete service failed', error);
+          setAllServices(prev => prev.filter(s => s.id !== id));
+        } else {
+          setAllServices(prev => prev.filter(s => s.id !== id));
+        }
+      } catch (e) {
+        console.warn(e);
+        setAllServices(prev => prev.filter(s => s.id !== id));
+      }
+    })();
   };
 
   return (
@@ -97,6 +405,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       jobs,
       installers,
       services,
+      user,
+      cities: DB_CITIES,
+      isAuthenticated: !!user,
+      login,
+      logout,
       addJob,
       updateJob,
       deleteJob,
@@ -115,8 +428,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 export const useApp = () => {
   const context = useContext(AppContext);
-  if (!context) {
-    throw new Error('useApp must be used within an AppProvider');
-  }
+  if (!context) throw new Error('useApp must be used within an AppProvider');
   return context;
 };

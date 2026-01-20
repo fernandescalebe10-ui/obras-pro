@@ -1,14 +1,11 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { Job, Installer } from '../types';
 
 export const generateBusinessReport = async (jobs: Job[], installers: Installer[]): Promise<string> => {
   try {
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) {
-      return "Chave de API não configurada. Por favor, configure a variável de ambiente API_KEY.";
-    }
-
-    const ai = new GoogleGenAI({ apiKey });
+    // Initializing Gemini SDK following mandatory patterns
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     // Prepare data summary for the prompt
     const summary = {
@@ -33,11 +30,13 @@ export const generateBusinessReport = async (jobs: Job[], installers: Installer[
       Use formatação Markdown simples.
     `;
 
+    // Updated to gemini-3-flash-preview as per model selection guidelines for general text tasks
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: prompt,
     });
 
+    // Accessing .text property directly instead of calling a method
     return response.text || "Não foi possível gerar o relatório no momento.";
   } catch (error) {
     console.error("Error generating report:", error);

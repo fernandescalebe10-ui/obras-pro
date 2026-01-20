@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Job, JobStatus, PaymentStatus, JobItem } from '../types';
@@ -5,7 +6,8 @@ import { Plus, Search, Filter, Edit, Trash2, X, Upload, FileText, Calculator, Ey
 import { format } from 'date-fns';
 
 const Jobs: React.FC = () => {
-  const { jobs, installers, services, addJob, updateJob, deleteJob, getInstallerName } = useApp();
+  // Added user to destructuring to provide cityId for new/updated records
+  const { jobs, installers, services, addJob, updateJob, deleteJob, getInstallerName, user } = useApp();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentJob, setCurrentJob] = useState<Partial<Job>>({});
@@ -123,12 +125,14 @@ const Jobs: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentJob.clientName || !currentJob.installerId) return;
+    // Added user validation to ensure cityId is available
+    if (!currentJob.clientName || !currentJob.installerId || !user) return;
 
     const activeItems = jobItems.filter(item => item.name.trim() !== '' && (item.quantity > 0 || item.pricePerUnit > 0));
 
     const jobData: Job = {
         id: isEditing ? currentJob.id! : Date.now().toString(),
+        cityId: user.cityId, // Injected cityId from current user context
         orderNumber: currentJob.orderNumber || `ORD-${Date.now().toString().slice(-4)}`,
         clientName: currentJob.clientName!,
         address: currentJob.address || '',

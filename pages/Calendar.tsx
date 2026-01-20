@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
@@ -9,7 +10,8 @@ import { Job, JobStatus, PaymentStatus, JobItem } from '../types';
 import { ChevronLeft, ChevronRight, Plus, X, Calendar as CalendarIcon, Save, Calculator, Trash2, Upload, FileText, Eye } from 'lucide-react';
 
 const Calendar: React.FC = () => {
-  const { jobs, installers, services, addJob, updateJob, deleteJob } = useApp();
+  // Added user to destructuring to inject cityId into new Job records
+  const { jobs, installers, services, addJob, updateJob, deleteJob, user } = useApp();
   const [currentDate, setCurrentDate] = useState(new Date());
   
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -148,13 +150,15 @@ const Calendar: React.FC = () => {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingJob) return;
+    // Added user validation to ensure cityId is available
+    if (!editingJob || !user) return;
 
     const activeItems = jobItems.filter(item => item.name.trim() !== '' && (item.quantity > 0 || item.pricePerUnit > 0));
 
     if (editingJob.id) {
       updateJob({
           ...editingJob as Job,
+          cityId: user.cityId, // Ensuring cityId is preserved on update
           items: activeItems,
           value: Number(editingJob.value?.toFixed(2)),
           photoUrl: editingJob.photoUrl,
@@ -164,6 +168,7 @@ const Calendar: React.FC = () => {
     } else if (selectedSlot) {
       const newJob: Job = {
         id: Date.now().toString(),
+        cityId: user.cityId, // Injecting cityId for new Job creation
         installerId: selectedSlot.installerId,
         date: selectedSlot.date.toISOString(),
         clientName: editingJob.clientName || 'Novo Cliente',

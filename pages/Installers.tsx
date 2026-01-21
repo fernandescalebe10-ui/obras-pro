@@ -201,6 +201,7 @@ const Installers: React.FC = () => {
                       <th className="px-3 py-2 text-left font-medium text-gray-500">Data</th>
                       <th className="px-3 py-2 text-left font-medium text-gray-500">Status</th>
                       <th className="px-3 py-2 text-left font-medium text-gray-500">Valor</th>
+                      <th className="px-3 py-2 text-left font-medium text-gray-500">Chave PIX</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -219,11 +220,12 @@ const Installers: React.FC = () => {
                              </span>
                           </td>
                           <td className="px-3 py-2">R$ {job.value.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                          <td className="px-3 py-2 text-sm text-gray-600">{selectedInstaller.pixKey || 'Não informado'}</td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={4} className="px-3 py-4 text-center text-gray-400">Nenhuma obra registrada para este instalador.</td>
+                        <td colSpan={5} className="px-3 py-4 text-center text-gray-400">Nenhuma obra registrada para este instalador.</td>
                       </tr>
                     )}
                   </tbody>

@@ -4,15 +4,20 @@
 -- Installers table
 CREATE TABLE IF NOT EXISTS installers (
   id TEXT PRIMARY KEY,
+  cityId INTEGER,
   name TEXT NOT NULL,
   specialty TEXT,
   phone TEXT,
+  active BOOLEAN DEFAULT true,
+  pixKey TEXT,
+  photoUrl TEXT,
   created_at timestamptz DEFAULT now()
 );
 
 -- Services table
 CREATE TABLE IF NOT EXISTS services (
   id TEXT PRIMARY KEY,
+  cityId INTEGER,
   name TEXT NOT NULL,
   defaultPrice numeric DEFAULT 0,
   created_at timestamptz DEFAULT now()
@@ -21,6 +26,7 @@ CREATE TABLE IF NOT EXISTS services (
 -- Jobs table
 CREATE TABLE IF NOT EXISTS jobs (
   id TEXT PRIMARY KEY,
+  cityId INTEGER,
   orderNumber TEXT,
   clientName TEXT NOT NULL,
   address TEXT,
@@ -32,28 +38,32 @@ CREATE TABLE IF NOT EXISTS jobs (
   installerId TEXT REFERENCES installers(id) ON DELETE SET NULL,
   notes TEXT,
   items jsonb,
+  qtd_serviços jsonb,
   photoUrl TEXT,
+  pdfUrl TEXT,
+  pdfName TEXT,
   created_at timestamptz DEFAULT now()
 );
 
 -- Optional: seed example data
-INSERT INTO installers (id, name, specialty, phone)
+INSERT INTO installers (id, cityId, name, specialty, phone, active, pixKey, photoUrl)
 VALUES
-  ('inst-1', 'Roberto Lima', 'Eletricista', '+55 11 90000-0001'),
-  ('inst-2', 'Ana Souza', 'Hidráulica', '+55 11 90000-0002')
+  ('inst-1', 1, 'Roberto Lima', 'Eletricista', '+55 11 90000-0001', true, 'roberto@email.com', ''),
+  ('inst-2', 1, 'Ana Souza', 'Hidráulica', '+55 11 90000-0002', true, '+5511990000002', '')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO services (id, name, defaultPrice)
+INSERT INTO services (id, cityId, name, defaultPrice)
 VALUES
-  ('svc-1', 'Instalação de painéis', 1500.00),
-  ('svc-2', 'Reparo hidráulico', 250.00),
-  ('svc-3', 'Pintura', 500.00)
+  ('svc-1', 1, 'Instalação de painéis', 1500.00),
+  ('svc-2', 1, 'Reparo hidráulico', 250.00),
+  ('svc-3', 1, 'Pintura', 500.00)
 ON CONFLICT (id) DO NOTHING;
 
 -- Example job (items stored as jsonb)
-INSERT INTO jobs (id, orderNumber, clientName, address, date, description, value, status, paymentStatus, installerId, notes, items, photoUrl)
+INSERT INTO jobs (id, cityId, orderNumber, clientName, address, date, description, value, status, paymentStatus, installerId, notes, items, qtd_serviços, photoUrl, pdfUrl, pdfName)
 VALUES (
   'job-1',
+  1,
   'ORD-0001',
   'Construtora Tech',
   'Rua Exemplo, 123',
@@ -65,6 +75,9 @@ VALUES (
   'inst-1',
   'Observações de teste',
   '[{"name":"Instalação de painéis","quantity":1,"pricePerUnit":1500.00,"total":1500.00}]'::jsonb,
+  '[{"item":"Instalação de painéis","qtd":1}]'::jsonb,
+  '',
+  '',
   ''
 )
 ON CONFLICT (id) DO NOTHING;

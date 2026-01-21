@@ -30,6 +30,7 @@ interface AppContextType {
   addService: (service: ServiceDefinition) => void;
   updateService: (service: ServiceDefinition) => void;
   deleteService: (id: string) => void;
+  reorderInstallers: (order: string[]) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -89,24 +90,57 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const { data: jobsData, error: jobsError } = await supabase.from('jobs').select('*');
         if (jobsError) console.warn('Supabase jobs error', jobsError);
         if (jobsData) {
-          const mapped = jobsData.map((r: any) => ({
-            id: r.id,
-            cityId: r.cityId ? Number(r.cityId) : 1,
-            orderNumber: r.orderNumber || '',
-            clientName: r.clientName || '',
-            address: r.address || '',
-            date: r.date ? new Date(r.date).toISOString() : new Date().toISOString(),
-            description: r.description || '',
-            value: r.value !== undefined ? Number(r.value) : 0,
-            status: (r.status as JobStatus) || JobStatus.SCHEDULED,
-            paymentStatus: (r.paymentStatus as PaymentStatus) || PaymentStatus.PENDING,
-            installerId: r.installerId || '',
-            items: r.items || undefined,
-            photoUrl: r.photoUrl || undefined,
-            pdfUrl: r.pdfUrl || undefined,
-            pdfName: r.pdfName || undefined,
-            notes: r.notes || undefined
-          } as Job));
+          // Create services map for reconstruction
+          const servicesMap = new Map<string, ServiceDefinition>();
+          if (servicesData) {
+            servicesData.forEach((r: any) => {
+              const service: ServiceDefinition = {
+                id: r.id,
+                cityId: r.cityId ? Number(r.cityId) : 1,
+                name: r.name || '',
+                defaultPrice: r.defaultPrice !== undefined ? Number(r.defaultPrice) : 0
+              };
+              servicesMap.set(service.name, service);
+            });
+          }
+
+          const mapped = jobsData.map((r: any) => {
+            let items: JobItem[] | undefined = undefined;
+            if (r.qtd_serviços) {
+              items = [];
+              r.qtd_serviços.forEach((q: any) => {
+                const service = servicesMap.get(q.item);
+                if (service && q.qtd > 0) {
+                  items.push({
+                    name: service.name,
+                    quantity: q.qtd,
+                    pricePerUnit: service.defaultPrice,
+                    total: q.qtd * service.defaultPrice
+                  });
+                }
+              });
+            }
+
+            return {
+              id: r.id,
+              cityId: r.cityId ? Number(r.cityId) : 1,
+              orderNumber: r.orderNumber || '',
+              clientName: r.clientName || '',
+              address: r.address || '',
+              date: r.date ? new Date(r.date).toISOString() : new Date().toISOString(),
+              description: r.description || '',
+              value: r.value !== undefined ? Number(r.value) : 0,
+              status: (r.status as JobStatus) || JobStatus.SCHEDULED,
+              paymentStatus: (r.paymentStatus as PaymentStatus) || PaymentStatus.PENDING,
+              installerId: r.installerId || '',
+              items: items,
+              qtd_serviços: r.qtd_serviços || undefined,
+              photoUrl: r.photoUrl || undefined,
+              pdfUrl: r.pdfUrl || undefined,
+              pdfName: r.pdfName || undefined,
+              notes: r.notes || undefined
+            } as Job;
+          });
           setAllJobs(mapped);
         }
       } catch (err) {
@@ -137,29 +171,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const services = allServices.filter(s => s.cityId === user?.cityId);
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    // Tenta buscar usuário no Supabase (tabela `users`) e validar senha
-    try {
-      const { data, error } = await supabase.from('users').select('*').eq('email', email).maybeSingle();
-      if (!error && data) {
-        // mapear possível snake_case para camelCase
-        const dbUser: any = data;
-        const candidate: User = {
-          id: dbUser.id,
-          name: dbUser.name || dbUser.full_name || '',
-          email: dbUser.email,
-          password: dbUser.password,
-          cityId: dbUser.cityId ?? dbUser.city_id ?? 1
-        };
-        if (candidate.password && candidate.password === password) {
-          setUser(candidate);
-          return true;
-        }
-      }
-    } catch (e) {
-      console.warn('Supabase users lookup failed', e);
-    }
-
-    // Fallback para `DB_USERS` local
+    // Busca na "Tabela" de Usuários
     const foundUser = DB_USERS.find(u => u.email === email && u.password === password);
     if (foundUser) {
       setUser(foundUser);
@@ -199,11 +211,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (payload.paymentStatus !== undefined) {
           payload.paymentStatus = mapPaymentToDb(payload.paymentStatus);
         }
+        // Create qtd_serviços from items
+        if (toInsert.items) {
+          payload.qtd_serviços = toInsert.items.filter(i => i.quantity > 0).map(i => ({item: i.name, qtd: i.quantity}));
+        }
         // remover campos que não existem na tabela jobs
         delete payload.items;
         delete payload.photoUrl;
-        delete payload.pdfUrl;
-        delete payload.pdfName;
         delete payload.notes;
         const { data, error } = await supabase.from('jobs').insert([payload]).select().single();
         if (error) {
@@ -244,11 +258,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (payload.paymentStatus !== undefined) {
           payload.paymentStatus = mapPaymentToDb(payload.paymentStatus);
         }
+        // Create qtd_serviços from items
+        if (updatedJob.items) {
+          payload.qtd_serviços = updatedJob.items.filter(i => i.quantity > 0).map(i => ({item: i.name, qtd: i.quantity}));
+        }
         // remover campos que não existem na tabela jobs
         delete payload.items;
         delete payload.photoUrl;
-        delete payload.pdfUrl;
-        delete payload.pdfName;
         delete payload.notes;
         const { data, error } = await supabase.from('jobs').update(payload).eq('id', updatedJob.id).select().single();
         if (error) {
@@ -289,7 +305,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const payload = { ...toInsert } as any;
         // remover campos que não existem na tabela installers
         delete payload.photoUrl;
-        delete payload.pixKey;
         const { data, error } = await supabase.from('installers').insert([payload]).select().single();
         if (error) {
           console.warn('Supabase insert installer failed', error);
@@ -310,7 +325,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const payload = { ...updated } as any;
         // remover campos que não existem na tabela installers
         delete payload.photoUrl;
-        delete payload.pixKey;
         const { data, error } = await supabase.from('installers').update(payload).eq('id', updated.id).select().single();
         if (error) {
           console.warn('Supabase update installer failed', error);
@@ -400,6 +414,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     })();
   };
 
+  const reorderInstallers = (order: string[]) => {
+    if (!user) return;
+    setAllInstallers(prev => {
+      const cityId = user.cityId;
+      const others = prev.filter(i => i.cityId !== cityId);
+      const cityInstallers = prev.filter(i => i.cityId === cityId);
+      const map = new Map(cityInstallers.map(i => [i.id, i]));
+      const reordered = order.map(id => map.get(id)).filter(Boolean) as Installer[];
+      const remaining = cityInstallers.filter(i => !order.includes(i.id));
+      return [...others, ...reordered, ...remaining];
+    });
+  };
+
   return (
     <AppContext.Provider value={{
       jobs,
@@ -420,6 +447,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       addService,
       updateService,
       deleteService
+      ,
+      reorderInstallers
     }}>
       {children}
     </AppContext.Provider>

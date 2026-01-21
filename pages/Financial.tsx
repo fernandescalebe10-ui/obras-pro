@@ -42,14 +42,9 @@ const Financial: React.FC = () => {
                         (filterStatus === 'paid' && job.paymentStatus === PaymentStatus.PAID) ||
                         (filterStatus === 'pending' && job.paymentStatus === PaymentStatus.PENDING);
     
-    const jobDate = new Date(job.date);
-    const start = startDate ? new Date(startDate) : null;
-    const end = endDate ? new Date(endDate) : null;
+    const jobDateStr = format(new Date(job.date), 'yyyy-MM-dd');
     
-    if (start) start.setHours(0, 0, 0, 0);
-    if (end) end.setHours(23, 59, 59, 999);
-
-    const matchDate = (!start || jobDate >= start) && (!end || jobDate <= end);
+    const matchDate = (!startDate || jobDateStr >= startDate) && (!endDate || jobDateStr <= endDate);
 
     return matchInstaller && matchStatus && matchDate;
   });
@@ -209,6 +204,9 @@ const Financial: React.FC = () => {
             <p className="text-gray-600">
               Instalador: <span className="font-bold">{getInstallerName(filterInstaller)}</span>
             </p>
+            <p className="text-gray-600">
+              Chave PIX: <span className="font-bold">{installers.find(i => i.id === filterInstaller)?.pixKey || 'Não informada'}</span>
+            </p>
             <p className="text-sm text-gray-500">
               Período: {format(new Date(startDate), 'dd/MM/yyyy')} a {format(new Date(endDate), 'dd/MM/yyyy')}
             </p>
@@ -266,7 +264,7 @@ const Financial: React.FC = () => {
                        <ul className="list-disc pl-4 space-y-1">
                          {job.items.filter(i => i.quantity > 0).map((item, idx) => (
                            <li key={idx}>
-                             <span className="font-medium">{item.name}:</span> {item.quantity} un/m x R$ {item.pricePerUnit} = <b>R$ {item.total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</b>
+                             {item.name}
                            </li>
                          ))}
                        </ul>

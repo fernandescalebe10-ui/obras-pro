@@ -11,7 +11,7 @@ import { ChevronLeft, ChevronRight, Plus, X, Calendar as CalendarIcon, Save, Cal
 
 const Calendar: React.FC = () => {
   // Added user to destructuring to inject cityId into new Job records
-  const { jobs, installers, services, addJob, updateJob, deleteJob, user } = useApp();
+  const { jobs, installers, services, addJob, updateJob, deleteJob, user, reorderInstallers } = useApp();
   const [currentDate, setCurrentDate] = useState(new Date());
   
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -22,6 +22,65 @@ const Calendar: React.FC = () => {
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
   const calendarDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+
+  const [orderedInstallers, setOrderedInstallers] = useState(() => installers.filter(i => i.active));
+  useEffect(() => setOrderedInstallers(installers.filter(i => i.active)), [installers]);
+  const [dragData, setDragData] = useState<any>(null);
+
+  const handleInstallerDragStart = (e: React.DragEvent, installerId: string, index: number) => {
+    e.dataTransfer.setData('application/json', JSON.stringify({ type: 'installer', id: installerId, index }));
+    setDragData({ type: 'installer', id: installerId, index });
+  };
+
+  const handleHeaderDragOver = (e: React.DragEvent) => e.preventDefault();
+
+  const handleHeaderDrop = (e: React.DragEvent, destIndex: number) => {
+    e.preventDefault();
+    const raw = e.dataTransfer.getData('application/json');
+    if (!raw) return;
+    try {
+      const data = JSON.parse(raw);
+      if (data.type === 'installer') {
+        const sourceIndex = orderedInstallers.findIndex(i => i.id === data.id);
+        if (sourceIndex === -1) return;
+        const newOrder = Array.from(orderedInstallers);
+        const [moved] = newOrder.splice(sourceIndex, 1);
+        newOrder.splice(destIndex, 0, moved);
+        setOrderedInstallers(newOrder);
+        reorderInstallers(newOrder.map(i => i.id));
+      }
+    } catch (err) {
+      // ignore
+    } finally {
+      setDragData(null);
+    }
+  };
+
+  const handleJobDragStart = (e: React.DragEvent, job: Job, day: Date, installerId: string) => {
+    e.dataTransfer.setData('application/json', JSON.stringify({ type: 'job', id: job.id, fromDate: day.toISOString(), fromInstallerId: installerId }));
+    setDragData({ type: 'job', id: job.id });
+  };
+
+  const handleCellDragOver = (e: React.DragEvent) => e.preventDefault();
+
+  const handleCellDrop = (e: React.DragEvent, day: Date, installerId: string) => {
+    e.preventDefault();
+    const raw = e.dataTransfer.getData('application/json');
+    if (!raw) return;
+    try {
+      const data = JSON.parse(raw);
+      if (data.type === 'job') {
+        const job = jobs.find(j => j.id === data.id);
+        if (!job) return;
+        const updated: Job = { ...job, date: day.toISOString(), installerId };
+        updateJob(updated);
+      }
+    } catch (err) {
+      // ignore
+    } finally {
+      setDragData(null);
+    }
+  };
 
   const handlePrevMonth = () => setCurrentDate(subMonths(currentDate, 1));
   const handleNextMonth = () => setCurrentDate(addMonths(currentDate, 1));
@@ -42,6 +101,25 @@ const Calendar: React.FC = () => {
     }
   };
 
+  // Palette for created jobs: light and slightly transparent
+  const jobColorPalette = [
+    { bg: 'bg-red-100/40', border: 'border-red-300', text: 'text-red-800' },
+    { bg: 'bg-blue-100/40', border: 'border-blue-300', text: 'text-blue-800' },
+    { bg: 'bg-green-100/40', border: 'border-green-300', text: 'text-green-800' },
+    { bg: 'bg-yellow-100/40', border: 'border-yellow-300', text: 'text-yellow-800' },
+    { bg: 'bg-purple-100/40', border: 'border-purple-300', text: 'text-purple-800' },
+  ];
+
+  const getJobPaletteClass = (jobId: string | number | undefined) => {
+    if (!jobId) return `${jobColorPalette[0].bg} ${jobColorPalette[0].border} ${jobColorPalette[0].text}`;
+    const idStr = String(jobId);
+    let sum = 0;
+    for (let i = 0; i < idStr.length; i++) sum += idStr.charCodeAt(i);
+    const idx = sum % jobColorPalette.length;
+    const c = jobColorPalette[idx];
+    return `${c.bg} ${c.border} ${c.text}`;
+  };
+
   const initializeItems = () => {
     return services.map(service => ({
       name: service.name,
@@ -52,17 +130,29 @@ const Calendar: React.FC = () => {
   };
 
   const prepareItemsForJob = (job?: Job) => {
-    if (job && job.items && job.items.length > 0) {
-      const existingMap = new Map(job.items.map(i => [i.name, i]));
+    if (job) {
+      // Parse qtd_serviços or items to set quantities
+      const qtyMap = new Map<string, number>();
+      if (job.qtd_serviços) {
+        job.qtd_serviços.forEach((q: any) => {
+          qtyMap.set(q.item, q.qtd);
+        });
+      } else if (job && job.items) {
+        job.items.forEach((item: JobItem) => {
+          qtyMap.set(item.name, item.quantity);
+        });
+      }
+      
       const mergedItems = services.map(service => {
-        const existing = existingMap.get(service.name);
-        return existing || { name: service.name, quantity: 0, pricePerUnit: service.defaultPrice, total: 0 };
+        const qty = qtyMap.get(service.name) || 0;
+        return { 
+          name: service.name, 
+          quantity: qty, 
+          pricePerUnit: service.defaultPrice, 
+          total: qty * service.defaultPrice 
+        };
       });
-      job.items.forEach(item => {
-        if (!services.some(s => s.name === item.name)) {
-          mergedItems.push(item);
-        }
-      });
+      
       setJobItems(mergedItems);
     } else {
       setJobItems(initializeItems());
@@ -121,7 +211,13 @@ const Calendar: React.FC = () => {
     if (isModalOpen && editingJob) {
       const total = jobItems.reduce((acc, item) => acc + item.total, 0);
       const safeTotal = Number(total.toFixed(2));
-      setEditingJob(prev => prev ? ({ ...prev, value: safeTotal }) : null);
+      setEditingJob(prev => {
+        if (safeTotal > 0 || !prev?.id) {
+          return prev ? { ...prev, value: safeTotal } : null;
+        } else {
+          return prev;
+        }
+      });
     }
   }, [jobItems]);
 
@@ -227,14 +323,22 @@ const Calendar: React.FC = () => {
               <th className="p-3 text-left text-xs font-bold text-gray-900 uppercase tracking-wider border-b border-r border-black min-w-[200px] sticky left-0 bg-gray-100 z-20">
                 Data
               </th>
-              {installers.filter(i => i.active).map(installer => (
-                <th key={installer.id} className="p-3 text-center text-xs font-bold text-gray-900 uppercase tracking-wider border-b border-r border-black min-w-[180px]">
+              {orderedInstallers.map((installer, idx) => (
+                <th
+                  key={installer.id}
+                  draggable
+                  onDragStart={(e) => handleInstallerDragStart(e, installer.id, idx)}
+                  onDragOver={handleHeaderDragOver}
+                  onDrop={(e) => handleHeaderDrop(e, idx)}
+                  className="p-3 text-center text-xs font-bold text-gray-900 uppercase tracking-wider border-b border-r border-black min-w-[180px]"
+                >
                   {installer.name}
                   <div className="text-[10px] text-gray-600 font-normal">{installer.specialty}</div>
                 </th>
               ))}
             </tr>
           </thead>
+
           <tbody>
             {calendarDays.map((day) => {
               const isWeekendDay = isWeekend(day);
@@ -245,20 +349,24 @@ const Calendar: React.FC = () => {
                     <div className="capitalize">{format(day, 'EEEE', { locale: ptBR })}</div>
                     <div className="text-xs text-gray-600">{format(day, "d 'de' MMMM 'de' yyyy", { locale: ptBR })}</div>
                   </td>
-                  {installers.filter(i => i.active).map(installer => {
+                  {orderedInstallers.map(installer => {
                     const cellJobs = getJobsForCell(day, installer.id);
                     return (
                       <td 
                         key={`${day}-${installer.id}`} 
                         className="p-1 border-r border-b border-black align-top min-h-[80px] hover:bg-blue-50/50 transition-colors cursor-pointer relative group"
-                        onClick={() => handleCellClick(day, installer.id)}
+                        onClick={() => { if (!dragData) handleCellClick(day, installer.id) }}
+                        onDragOver={handleCellDragOver}
+                        onDrop={(e) => handleCellDrop(e, day, installer.id)}
                       >
                         <div className="min-h-[60px] flex flex-col gap-1">
-                          {cellJobs.map(job => (
+                          {cellJobs.map((job) => (
                             <div 
                               key={job.id}
+                              draggable
+                              onDragStart={(e) => handleJobDragStart(e, job, day, installer.id)}
                               onClick={(e) => handleJobClick(e, job)}
-                              className={`p-2 text-xs shadow-sm rounded cursor-pointer hover:opacity-90 transition-opacity border ${getStatusStyle(job.status)}`}
+                              className={`p-2 text-xs shadow-sm rounded cursor-pointer hover:opacity-90 transition-opacity ${getJobPaletteClass(job.id)} border`}
                             >
                               <div className="font-bold truncate">{job.clientName}</div>
                               <div className="truncate opacity-90">{job.orderNumber}</div>

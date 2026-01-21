@@ -63,6 +63,7 @@ export interface Job {
   paymentStatus: PaymentStatus;
   installerId: string;
   items?: JobItem[]; 
+  qtd_serviços?: string[];
   photoUrl?: string;
   pdfUrl?: string;
   pdfName?: string;

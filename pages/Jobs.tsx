@@ -47,21 +47,29 @@ const Jobs: React.FC = () => {
       date: new Date(job.date).toISOString().slice(0, 16)
     });
     
-    if (job.items && job.items.length > 0) {
-      const existingMap = new Map(job.items.map(i => [i.name, i]));
-      const mergedItems = services.map(service => {
-        const existing = existingMap.get(service.name);
-        return existing || { name: service.name, quantity: 0, pricePerUnit: service.defaultPrice, total: 0 };
+    // Parse qtd_serviços or items to set quantities
+    const qtyMap = new Map<string, number>();
+    if (job.qtd_serviços) {
+      job.qtd_serviços.forEach((q: any) => {
+        qtyMap.set(q.item, q.qtd);
       });
-      job.items.forEach(item => {
-        if (!services.some(s => s.name === item.name)) {
-          mergedItems.push(item);
-        }
+    } else if (job.items) {
+      job.items.forEach((item: JobItem) => {
+        qtyMap.set(item.name, item.quantity);
       });
-      setJobItems(mergedItems);
-    } else {
-      setJobItems(initializeItems());
     }
+    
+    const mergedItems = services.map(service => {
+      const qty = qtyMap.get(service.name) || 0;
+      return { 
+        name: service.name, 
+        quantity: qty, 
+        pricePerUnit: service.defaultPrice, 
+        total: qty * service.defaultPrice 
+      };
+    });
+    
+    setJobItems(mergedItems);
     setIsEditing(true);
     setIsModalOpen(true);
   };
@@ -69,8 +77,14 @@ const Jobs: React.FC = () => {
   useEffect(() => {
     const total = jobItems.reduce((acc, item) => acc + item.total, 0);
     const safeTotal = Number(total.toFixed(2));
-    setCurrentJob(prev => ({ ...prev, value: safeTotal }));
-  }, [jobItems]);
+    setCurrentJob(prev => {
+      if (safeTotal > 0 || !isEditing) {
+        return { ...prev, value: safeTotal };
+      } else {
+        return prev;
+      }
+    });
+  }, [jobItems, isEditing]);
 
   const handleItemChange = (index: number, field: 'quantity' | 'pricePerUnit' | 'name', value: string | number) => {
     const newItems = [...jobItems];

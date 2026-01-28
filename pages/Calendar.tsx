@@ -101,23 +101,22 @@ const Calendar: React.FC = () => {
     }
   };
 
-  // Palette for created jobs: light and slightly transparent
-  const jobColorPalette = [
-    { bg: 'bg-red-100/40', border: 'border-red-300', text: 'text-red-800' },
-    { bg: 'bg-blue-100/40', border: 'border-blue-300', text: 'text-blue-800' },
-    { bg: 'bg-green-100/40', border: 'border-green-300', text: 'text-green-800' },
-    { bg: 'bg-yellow-100/40', border: 'border-yellow-300', text: 'text-yellow-800' },
-    { bg: 'bg-purple-100/40', border: 'border-purple-300', text: 'text-purple-800' },
-  ];
-
-  const getJobPaletteClass = (jobId: string | number | undefined) => {
-    if (!jobId) return `${jobColorPalette[0].bg} ${jobColorPalette[0].border} ${jobColorPalette[0].text}`;
-    const idStr = String(jobId);
-    let sum = 0;
-    for (let i = 0; i < idStr.length; i++) sum += idStr.charCodeAt(i);
-    const idx = sum % jobColorPalette.length;
-    const c = jobColorPalette[idx];
-    return `${c.bg} ${c.border} ${c.text}`;
+  // Cores dos cards no calendário de acordo com o status / pagamento
+  const getJobColorClass = (job: Job) => {
+    // Finalizadas: verde
+    if (job.status === JobStatus.FINISHED) {
+      return 'bg-green-100/80 border-green-400 text-green-900';
+    }
+    // Canceladas: vermelho
+    if (job.status === JobStatus.CANCELLED) {
+      return 'bg-red-100/80 border-red-400 text-red-900';
+    }
+    // Pagamento pendente: amarelo
+    if (job.paymentStatus === PaymentStatus.PENDING) {
+      return 'bg-yellow-100/80 border-yellow-400 text-yellow-900';
+    }
+    // Demais (agendada / andamento e não pendente): azul suave
+    return 'bg-blue-100/70 border-blue-300 text-blue-900';
   };
 
   const initializeItems = () => {
@@ -366,7 +365,7 @@ const Calendar: React.FC = () => {
                               draggable
                               onDragStart={(e) => handleJobDragStart(e, job, day, installer.id)}
                               onClick={(e) => handleJobClick(e, job)}
-                              className={`p-2 text-xs shadow-sm rounded cursor-pointer hover:opacity-90 transition-opacity ${getJobPaletteClass(job.id)} border`}
+                              className={`p-2 text-xs shadow-sm rounded cursor-pointer hover:opacity-90 transition-opacity ${getJobColorClass(job)} border`}
                             >
                               <div className="font-bold truncate">{job.clientName}</div>
                               <div className="truncate opacity-90">{job.orderNumber}</div>

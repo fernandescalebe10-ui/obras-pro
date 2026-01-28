@@ -9,26 +9,21 @@ Follow these steps to create the Supabase project, create tables and connect the
 2) Create tables using the SQL editor
    - In Supabase, go to "SQL" -> "Editor" and create a new query.
    - Copy the contents of `supabase/schema.sql` from this repo and run it.
-     This will create `installers`, `services` and `jobs` and insert example data.
+     This will create `users`, `installers`, `services` and `jobs` tables and insert example data.
 
 3) Quick dev access (for testing only)
    - For quick testing you can disable Row Level Security (RLS) on the tables:
      - In Supabase UI, go to "Table Editor" -> select a table -> "Settings" -> disable "Enable RLS".
    - If you prefer to keep RLS enabled (recommended for production), create policies to allow `anon` to `select`, `insert`, `update`, `delete` as appropriate.
 
-   Example policy (SQL) to allow public SELECT on `jobs` (run in SQL editor):
+   Example policy (SQL) to allow public SELECT on `users` (development only):
 
-   -- Allow anonymous users to read jobs (development only)
-   CREATE POLICY "anon_select_jobs" ON public.jobs
+   -- Allow anonymous users to read users (development only)
+   CREATE POLICY "anon_select_users" ON public.users
    FOR SELECT
    USING (true);
 
-   -- Allow anonymous users to insert jobs (development only)
-   CREATE POLICY "anon_insert_jobs" ON public.jobs
-   FOR INSERT
-   WITH CHECK (true);
-
-   Repeat or adapt for `installers` and `services` as needed.
+   Repeat or adapt for `installers`, `services`, and `jobs` as needed.
 
 4) Add environment variables
    - Create a file named `.env` in the project root (do not commit it).

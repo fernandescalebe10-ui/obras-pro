@@ -1,6 +1,16 @@
     -- Supabase schema for Obras-pro
 -- Run this in Supabase SQL Editor to create tables and seed data.
 
+-- Users table
+CREATE TABLE IF NOT EXISTS users (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  password TEXT NOT NULL, -- Note: In production, use Supabase Auth instead
+  cityId INTEGER,
+  created_at timestamptz DEFAULT now()
+);
+
 -- Installers table
 CREATE TABLE IF NOT EXISTS installers (
   id TEXT PRIMARY KEY,
@@ -46,6 +56,12 @@ CREATE TABLE IF NOT EXISTS jobs (
 );
 
 -- Optional: seed example data
+INSERT INTO users (name, email, password, cityId)
+VALUES
+  ('Admin', 'admin@granpisos.com', 'admin123', 1),
+  ('Usuario Teste', 'teste@granpisos.com', 'teste123', 1)
+ON CONFLICT (email) DO NOTHING;
+
 INSERT INTO installers (id, cityId, name, specialty, phone, active, pixKey, photoUrl)
 VALUES
   ('inst-1', 1, 'Roberto Lima', 'Eletricista', '+55 11 90000-0001', true, 'roberto@email.com', ''),

@@ -264,7 +264,8 @@ const Financial: React.FC = () => {
                        <ul className="list-disc pl-4 space-y-1">
                          {job.items.filter(i => i.quantity > 0).map((item, idx) => (
                            <li key={idx}>
-                             {item.name}
+                             {/* Exemplo: 10 metros de rodapé x R$ 9,00 = R$ 90,00 */}
+                             {`${item.quantity} ${item.name} x R$ ${item.pricePerUnit.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} = R$ ${item.total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                            </li>
                          ))}
                        </ul>

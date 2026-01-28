@@ -171,13 +171,33 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const services = allServices.filter(s => s.cityId === user?.cityId);
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    // Busca na "Tabela" de Usuários
-    const foundUser = DB_USERS.find(u => u.email === email && u.password === password);
-    if (foundUser) {
-      setUser(foundUser);
+    try {
+      // Busca no Supabase
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .eq('password', password)
+        .single();
+
+      if (error || !data) {
+        console.warn('Login failed:', error?.message);
+        return false;
+      }
+
+      // Mapeia para o tipo User
+      const user: User = {
+        id: data.id,
+        name: data.name,
+        email: data.email,
+        cityId: data.cityId,
+      };
+      setUser(user);
       return true;
+    } catch (err) {
+      console.error('Login error:', err);
+      return false;
     }
-    return false;
   };
 
   const logout = () => setUser(null);
@@ -191,7 +211,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       try {
         const payload = { ...toInsert } as any;
         // keep cityId and installerId as-is (do not modify)
-        // Map localized enums to DB enum values
+        // Map localized enums (pt-BR) para os valores textuais usados no banco
         const mapStatusToDb = (s: any) => {
           switch (s) {
             case JobStatus.IN_PROGRESS: return 'IN_PROGRESS';
@@ -211,20 +231,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (payload.paymentStatus !== undefined) {
           payload.paymentStatus = mapPaymentToDb(payload.paymentStatus);
         }
-        // Create qtd_serviços from items
+        // Cria o campo qtd_serviços a partir dos items para persistência no banco
         if (toInsert.items) {
           payload.qtd_serviços = toInsert.items.filter(i => i.quantity > 0).map(i => ({item: i.name, qtd: i.quantity}));
         }
-        // remover campos que não existem na tabela jobs
-        delete payload.items;
-        delete payload.photoUrl;
-        delete payload.notes;
+        // Remover apenas campos que realmente não existem na tabela jobs
+        // (items é mantido para permitir armazenar o JSON completo no banco)
         const { data, error } = await supabase.from('jobs').insert([payload]).select().single();
         if (error) {
           console.warn('Supabase insert job failed', error);
           setAllJobs(prev => [{ ...toInsert }, ...prev]);
         } else {
-          setAllJobs(prev => [{ ...data }, ...prev]);
+          // Garante que o estado local continue usando o formato Job da aplicação
+          // (com enums em pt-BR e a estrutura completa de items)
+          const inserted = data as any;
+          setAllJobs(prev => [{ ...toInsert, id: inserted?.id ?? toInsert.id }, ...prev]);
         }
       } catch (e) {
         console.warn(e);

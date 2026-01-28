@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { LogIn, Mail, Lock, AlertCircle } from 'lucide-react';
+import logoImage from '../images/Granpisos.jpeg';
 
 const Login: React.FC = () => {
   const { login } = useApp();
@@ -34,7 +35,7 @@ const Login: React.FC = () => {
         <div className="bg-white p-8 flex flex-col items-center justify-center border-b">
           <div className="h-24 w-full flex items-center justify-center mb-4">
             <img 
-              src="https://i.imgur.com/gA3gY4j.jpeg" 
+              src={logoImage} 
               alt="Logo" 
               className="max-h-full max-w-full object-contain"
             />

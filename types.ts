@@ -63,7 +63,8 @@ export interface Job {
   paymentStatus: PaymentStatus;
   installerId: string;
   items?: JobItem[]; 
-  qtd_servicos?: string[];
+  /** Quantidades por serviço (item, qtd, etc.) – usado pelo banco e exibição */
+  qtd_servicos?: { item: string; qtd: number; pricePerUnit?: number; total?: number }[];
   photoUrl?: string;
   pdfUrl?: string;
   notes?: string;

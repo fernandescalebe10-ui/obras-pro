@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { Job, Installer, JobStatus, PaymentStatus, ServiceDefinition, User, City } from '../types';
+import { Job, Installer, JobItem, JobStatus, PaymentStatus, ServiceDefinition, User, City } from '../types';
 import { DB_CITIES, DB_USERS, INITIAL_INSTALLERS, INITIAL_JOBS, INITIAL_SERVICES } from '../constants';
 import supabase from '../services/supabase';
 
@@ -104,12 +104,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             });
           }
 
-          // PostgreSQL/Supabase podem retornar colunas em minúsculas (ordernumber, clientname)
-          const col = (row: any, key: string) => row[key] ?? row[key.toLowerCase()];
+          // PostgreSQL/Supabase podem retornar colunas em minúsculas ou camelCase
+          const col = (row: any, key: string) => {
+            if (row[key] !== undefined && row[key] !== null) return row[key];
+            const lower = key.toLowerCase();
+            if (row[lower] !== undefined && row[lower] !== null) return row[lower];
+            const camel = key.replace(/_([a-z])/g, (_, l) => l.toUpperCase());
+            return row[camel];
+          };
           const mapped = jobsData.map((r: any) => {
             let items: JobItem[] | undefined = undefined;
-            const qtdServicos = r.qtd_servicos;
-            if (qtdServicos && Array.isArray(qtdServicos)) {
+            // Garantir que qtd_servicos seja sempre array (Supabase/JSON pode retornar objeto)
+            const qtdServicosRaw = col(r, 'qtd_servicos');
+            const qtdServicos = qtdServicosRaw == null
+              ? undefined
+              : Array.isArray(qtdServicosRaw)
+                ? qtdServicosRaw
+                : typeof qtdServicosRaw === 'object'
+                  ? Object.values(qtdServicosRaw)
+                  : [];
+            if (qtdServicos && qtdServicos.length > 0) {
               items = [];
               qtdServicos.forEach((q: any) => {
                 const name = q.item ?? q.name ?? '';
@@ -128,12 +142,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               });
             }
             // Se o banco retornar items (jsonb) completo, usar
-            if (r.items && Array.isArray(r.items) && r.items.length > 0) {
-              items = r.items.map((i: any) => ({
+            const rawItems = col(r, 'items');
+            if (rawItems && Array.isArray(rawItems) && rawItems.length > 0) {
+              items = rawItems.map((i: any) => ({
                 name: i.name || '',
                 quantity: Number(i.quantity) || 0,
                 pricePerUnit: Number(i.pricePerUnit) || 0,
                 total: Number(i.total) || 0
+              }));
+            }
+
+            // Garantir qtd_servicos no job: usar o que veio do banco ou derivar de items
+            let qtdServicosFinal = qtdServicos;
+            if ((!qtdServicosFinal || qtdServicosFinal.length === 0) && items && items.length > 0) {
+              qtdServicosFinal = items.map(i => ({
+                item: i.name,
+                qtd: i.quantity,
+                pricePerUnit: i.pricePerUnit,
+                total: i.total
               }));
             }
 
@@ -150,7 +176,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               paymentStatus: (col(r, 'paymentStatus') as PaymentStatus) || PaymentStatus.PENDING,
               installerId: col(r, 'installerId') || '',
               items: items,
-              qtd_servicos: qtdServicos || undefined,
+              qtd_servicos: qtdServicosFinal || undefined,
               notes: col(r, 'notes') || undefined
             } as Job;
           });
@@ -232,6 +258,80 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  // Converte uma linha do Supabase em Job (com items e qtd_servicos preenchidos)
+  const mapRowToJob = (r: any, servicesList: ServiceDefinition[]): Job => {
+    const col = (row: any, key: string) => {
+      if (row[key] !== undefined && row[key] !== null) return row[key];
+      const lower = key.toLowerCase();
+      if (row[lower] !== undefined && row[lower] !== null) return row[lower];
+      const camel = key.replace(/_([a-z])/g, (_, l) => l.toUpperCase());
+      return row[camel];
+    };
+    const servicesMap = new Map(servicesList.map(s => [s.name, s]));
+    let items: JobItem[] | undefined;
+    const qtdServicosRaw = col(r, 'qtd_servicos');
+    const qtdServicos = qtdServicosRaw == null ? undefined
+      : Array.isArray(qtdServicosRaw) ? qtdServicosRaw
+      : typeof qtdServicosRaw === 'object' ? Object.values(qtdServicosRaw) : [];
+    if (qtdServicos && qtdServicos.length > 0) {
+      items = [];
+      qtdServicos.forEach((q: any) => {
+        const name = q.item ?? q.name ?? '';
+        const qtd = Number(q.qtd ?? q.quantity ?? 0);
+        const service = servicesMap.get(name);
+        const pricePerUnit = q.pricePerUnit != null ? Number(q.pricePerUnit) : (service?.defaultPrice ?? 0);
+        const total = q.total != null ? Number(q.total) : qtd * pricePerUnit;
+        if (name && (qtd > 0 || total > 0)) items.push({ name, quantity: qtd, pricePerUnit, total });
+      });
+    }
+    const rawItems = col(r, 'items');
+    if (rawItems && Array.isArray(rawItems) && rawItems.length > 0) {
+      items = rawItems.map((i: any) => ({
+        name: i.name || '',
+        quantity: Number(i.quantity) || 0,
+        pricePerUnit: Number(i.pricePerUnit) || 0,
+        total: Number(i.total) || 0
+      }));
+    }
+    let qtdServicosFinal = qtdServicos;
+    if ((!qtdServicosFinal || qtdServicosFinal.length === 0) && items && items.length > 0) {
+      qtdServicosFinal = items.map(i => ({ item: i.name, qtd: i.quantity, pricePerUnit: i.pricePerUnit, total: i.total }));
+    }
+    return {
+      id: r.id,
+      cityId: col(r, 'cityId') != null ? Number(col(r, 'cityId')) : 1,
+      orderNumber: col(r, 'orderNumber') || '',
+      clientName: col(r, 'clientName') || '',
+      address: col(r, 'address') || '',
+      date: col(r, 'date') ? new Date(col(r, 'date')).toISOString() : new Date().toISOString(),
+      description: col(r, 'description') || '',
+      value: col(r, 'value') !== undefined && col(r, 'value') !== null ? Number(col(r, 'value')) : 0,
+      status: (col(r, 'status') as JobStatus) || JobStatus.SCHEDULED,
+      paymentStatus: (col(r, 'paymentStatus') as PaymentStatus) || PaymentStatus.PENDING,
+      installerId: col(r, 'installerId') || '',
+      items,
+      qtd_servicos: qtdServicosFinal || undefined,
+      notes: col(r, 'notes') || undefined
+    } as Job;
+  };
+
+  // Garantir que o job no estado tenha qtd_servicos (para exibição) quando tiver items
+  const jobWithQtdServicos = (job: Job): Job => {
+    if (job.qtd_servicos && Array.isArray(job.qtd_servicos) && job.qtd_servicos.length > 0) return job;
+    if (job.items && job.items.length > 0) {
+      return {
+        ...job,
+        qtd_servicos: job.items.map(i => ({
+          item: i.name,
+          qtd: i.quantity,
+          pricePerUnit: i.pricePerUnit,
+          total: i.total
+        }))
+      };
+    }
+    return job;
+  };
+
   // Payload para a tabela jobs no Supabase (apenas colunas que existem na tabela)
   const buildJobPayload = (job: Job) => {
     const qtd_servicos =
@@ -276,14 +376,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const { data, error } = await supabase.from('jobs').insert([payload]).select().single();
         if (error) {
           console.error('Supabase insert job failed:', error.message, error.details);
-          setAllJobs(prev => [{ ...toInsert }, ...prev]);
+          setAllJobs(prev => [jobWithQtdServicos({ ...toInsert }), ...prev]);
         } else {
-          const inserted = data as any;
-          setAllJobs(prev => [{ ...toInsert, id: inserted?.id ?? toInsert.id }, ...prev]);
+          const fromDb = mapRowToJob(data, allServices);
+          const saved: Job = {
+            ...fromDb,
+            id: (data as any)?.id ?? toInsert.id,
+            photoUrl: toInsert.photoUrl,
+            pdfUrl: toInsert.pdfUrl
+          };
+          setAllJobs(prev => [jobWithQtdServicos(saved), ...prev]);
         }
       } catch (e) {
         console.error('addJob exception', e);
-        setAllJobs(prev => [{ ...toInsert }, ...prev]);
+        setAllJobs(prev => [jobWithQtdServicos({ ...toInsert }), ...prev]);
       }
     })();
   };
@@ -295,13 +401,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const { data, error } = await supabase.from('jobs').update(payload).eq('id', updatedJob.id).select().single();
         if (error) {
           console.warn('Supabase update job failed', error);
-          setAllJobs(prev => prev.map(j => j.id === updatedJob.id ? updatedJob : j));
+          setAllJobs(prev => prev.map(j => j.id === updatedJob.id ? jobWithQtdServicos(updatedJob) : j));
         } else {
-          setAllJobs(prev => prev.map(j => j.id === updatedJob.id ? { ...updatedJob } : j));
+          const fromDb = mapRowToJob(data, allServices);
+          const merged: Job = {
+            ...fromDb,
+            photoUrl: updatedJob.photoUrl,
+            pdfUrl: updatedJob.pdfUrl
+          };
+          setAllJobs(prev => prev.map(j => j.id === updatedJob.id ? jobWithQtdServicos(merged) : j));
         }
       } catch (e) {
         console.warn(e);
-        setAllJobs(prev => prev.map(j => j.id === updatedJob.id ? updatedJob : j));
+        setAllJobs(prev => prev.map(j => j.id === updatedJob.id ? jobWithQtdServicos(updatedJob) : j));
       }
     })();
   };

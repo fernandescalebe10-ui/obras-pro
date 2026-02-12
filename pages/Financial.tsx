@@ -258,20 +258,29 @@ const Financial: React.FC = () => {
                       {getInstallerName(job.installerId)}
                     </td>
                   )}
-                  {/* Service Details Column */}
+                  {/* Service Details Column - usa items ou qtd_servicos para PDF/relatório */}
                   <td className="px-6 py-4 text-xs text-gray-600 align-top">
-                     {job.items && job.items.some(i => i.quantity > 0) ? (
-                       <ul className="list-disc pl-4 space-y-1">
-                         {job.items.filter(i => i.quantity > 0).map((item, idx) => (
-                           <li key={idx}>
-                             {/* Exemplo: 10 metros de rodapé x R$ 9,00 = R$ 90,00 */}
-                             {`${item.quantity} ${item.name} x R$ ${item.pricePerUnit.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} = R$ ${item.total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                           </li>
-                         ))}
-                       </ul>
-                     ) : (
-                       <span className="italic text-gray-400">Sem itens detalhados</span>
-                     )}
+                     {(() => {
+                       const displayItems = job.items && job.items.length > 0
+                         ? job.items
+                         : (Array.isArray(job.qtd_servicos) ? job.qtd_servicos : (job.qtd_servicos && typeof job.qtd_servicos === 'object' ? Object.values(job.qtd_servicos) : [])).map((q: any) => ({
+                           name: q?.item ?? q?.name ?? '',
+                           quantity: Number(q?.qtd ?? q?.quantity ?? 0) || 0,
+                           pricePerUnit: Number(q?.pricePerUnit ?? 0) || 0,
+                           total: Number(q?.total ?? 0) || 0
+                         })).filter((i: { name: string; quantity: number }) => i.name && i.quantity > 0);
+                       return displayItems.length > 0 ? (
+                         <ul className="list-disc pl-4 space-y-1">
+                           {displayItems.map((item: { name: string; quantity: number; pricePerUnit: number; total: number }, idx: number) => (
+                             <li key={idx}>
+                               {`${item.quantity} ${item.name} x R$ ${(item.pricePerUnit || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} = R$ ${(item.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                             </li>
+                           ))}
+                         </ul>
+                       ) : (
+                         <span className="italic text-gray-400">Sem itens detalhados</span>
+                       );
+                     })()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-bold align-top">
                     R$ {job.value.toLocaleString('pt-BR', {minimumFractionDigits: 2})}

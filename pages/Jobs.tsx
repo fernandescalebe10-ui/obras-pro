@@ -46,29 +46,38 @@ const Jobs: React.FC = () => {
       date: new Date(job.date).toISOString().slice(0, 16)
     });
     
-    // Parse qtd_servicos or items to set quantities
-    const qtyMap = new Map<string, number>();
-    if (job.qtd_servicos) {
-      job.qtd_servicos.forEach((q: any) => {
-        qtyMap.set(q.item, q.qtd);
-      });
-    } else if (job.items) {
-      job.items.forEach((item: JobItem) => {
-        qtyMap.set(item.name, item.quantity);
-      });
+    // Montar lista de itens do job: priorizar job.items, senão converter qtd_servicos (mesma lógica do Calendário)
+    let jobItemsList: JobItem[] = [];
+    if (job.items && job.items.length > 0) {
+      jobItemsList = job.items.map(i => ({
+        name: i.name || '',
+        quantity: i.quantity ?? 0,
+        pricePerUnit: i.pricePerUnit ?? 0,
+        total: i.total ?? 0
+      }));
+    } else {
+      const qtdServicos = job.qtd_servicos;
+      const qtdArray = Array.isArray(qtdServicos) ? qtdServicos : (qtdServicos && typeof qtdServicos === 'object' ? Object.values(qtdServicos) : []);
+      if (qtdArray.length > 0) {
+        jobItemsList = qtdArray.map((q: any) => {
+          const name = String(q?.item ?? q?.name ?? '').trim();
+          const quantity = Number(q?.qtd ?? q?.quantity ?? 0) || 0;
+          const service = services.find(s => s.name === name);
+          const pricePerUnit = q?.pricePerUnit != null ? Number(q.pricePerUnit) : (service?.defaultPrice ?? 0);
+          const total = q?.total != null ? Number(q.total) : quantity * pricePerUnit;
+          return { name, quantity, pricePerUnit, total };
+        }).filter(i => i.name !== '');
+      }
     }
-    
-    const mergedItems = services.map(service => {
-      const qty = qtyMap.get(service.name) || 0;
-      return { 
-        name: service.name, 
-        quantity: qty, 
-        pricePerUnit: service.defaultPrice, 
-        total: qty * service.defaultPrice 
-      };
+    const byName = new Map<string, JobItem>(jobItemsList.map(i => [i.name, i]));
+    const fromServices = services.map(s => {
+      const existing = byName.get(s.name);
+      if (existing) return existing;
+      return { name: s.name, quantity: 0, pricePerUnit: s.defaultPrice, total: 0 };
     });
-    
-    setJobItems(mergedItems);
+    const serviceNames = new Set(services.map(s => s.name));
+    const customItems = jobItemsList.filter(i => !serviceNames.has(i.name));
+    setJobItems([...fromServices, ...customItems]);
     setIsEditing(true);
     setIsModalOpen(true);
   };

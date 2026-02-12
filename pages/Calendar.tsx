@@ -6,7 +6,7 @@ import {
   addMonths, subMonths, isWeekend
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Job, JobStatus, PaymentStatus, JobItem } from '../types';
+import { Job, JobStatus, PaymentStatus, JobItem, Installer } from '../types';
 import { ChevronLeft, ChevronRight, Plus, X, Calendar as CalendarIcon, Save, Calculator, Trash2, Upload, FileText, Eye } from 'lucide-react';
 
 const Calendar: React.FC = () => {
@@ -47,7 +47,7 @@ const Calendar: React.FC = () => {
         const [moved] = newOrder.splice(sourceIndex, 1);
         newOrder.splice(destIndex, 0, moved);
         setOrderedInstallers(newOrder);
-        reorderInstallers(newOrder.map(i => i.id));
+        reorderInstallers(newOrder.map((i: Installer) => i.id));
       }
     } catch (err) {
       // ignore
@@ -130,29 +130,41 @@ const Calendar: React.FC = () => {
 
   const prepareItemsForJob = (job?: Job) => {
     if (job) {
-      // Parse qtd_servicos or items to set quantities
-      const qtyMap = new Map<string, number>();
-      if (job.qtd_servicos) {
-        job.qtd_servicos.forEach((q: any) => {
-          qtyMap.set(q.item, q.qtd);
-        });
-      } else if (job && job.items) {
-        job.items.forEach((item: JobItem) => {
-          qtyMap.set(item.name, item.quantity);
-        });
+      // Montar lista de itens do job: priorizar job.items, senão converter qtd_servicos
+      let jobItemsList: JobItem[] = [];
+      if (job.items && job.items.length > 0) {
+        jobItemsList = job.items.map(i => ({
+          name: i.name || '',
+          quantity: i.quantity ?? 0,
+          pricePerUnit: i.pricePerUnit ?? 0,
+          total: i.total ?? 0
+        }));
+      } else {
+        const qtdServicos = job.qtd_servicos;
+        const qtdArray = Array.isArray(qtdServicos) ? qtdServicos : (qtdServicos && typeof qtdServicos === 'object' ? Object.values(qtdServicos) : []);
+        if (qtdArray.length > 0) {
+          jobItemsList = qtdArray.map((q: any) => {
+            const name = String(q?.item ?? q?.name ?? '').trim();
+            const quantity = Number(q?.qtd ?? q?.quantity ?? 0) || 0;
+            const service = services.find(s => s.name === name);
+            const pricePerUnit = q?.pricePerUnit != null ? Number(q.pricePerUnit) : (service?.defaultPrice ?? 0);
+            const total = q?.total != null ? Number(q.total) : quantity * pricePerUnit;
+            return { name, quantity, pricePerUnit, total };
+          }).filter(i => i.name !== '');
+        }
       }
-      
-      const mergedItems = services.map(service => {
-        const qty = qtyMap.get(service.name) || 0;
-        return { 
-          name: service.name, 
-          quantity: qty, 
-          pricePerUnit: service.defaultPrice, 
-          total: qty * service.defaultPrice 
-        };
+
+      const byName = new Map<string, JobItem>(jobItemsList.map(i => [i.name, i]));
+      // Serviços cadastrados: usar dados do job se existir, senão linha com 0
+      const fromServices = services.map(s => {
+        const existing = byName.get(s.name);
+        if (existing) return existing;
+        return { name: s.name, quantity: 0, pricePerUnit: s.defaultPrice, total: 0 };
       });
-      
-      setJobItems(mergedItems);
+      // Itens do job que não estão na lista de serviços (customizados)
+      const serviceNames = new Set(services.map(s => s.name));
+      const customItems = jobItemsList.filter(i => !serviceNames.has(i.name));
+      setJobItems([...fromServices, ...customItems]);
     } else {
       setJobItems(initializeItems());
     }

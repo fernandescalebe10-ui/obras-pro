@@ -130,10 +130,10 @@ const Calendar: React.FC = () => {
 
   const prepareItemsForJob = (job?: Job) => {
     if (job) {
-      // Parse qtd_serviços or items to set quantities
+      // Parse qtd_servicos or items to set quantities
       const qtyMap = new Map<string, number>();
-      if (job.qtd_serviços) {
-        job.qtd_serviços.forEach((q: any) => {
+      if (job.qtd_servicos) {
+        job.qtd_servicos.forEach((q: any) => {
           qtyMap.set(q.item, q.qtd);
         });
       } else if (job && job.items) {
@@ -165,8 +165,7 @@ const Calendar: React.FC = () => {
       paymentStatus: PaymentStatus.PENDING,
       value: 0,
       photoUrl: '',
-      pdfUrl: '',
-      pdfName: ''
+      pdfUrl: ''
     });
     setJobItems(initializeItems());
     setIsModalOpen(true);
@@ -198,8 +197,7 @@ const Calendar: React.FC = () => {
       reader.onloadend = () => {
         setEditingJob(prev => prev ? ({ 
           ...prev, 
-          pdfUrl: reader.result as string,
-          pdfName: file.name
+          pdfUrl: reader.result as string
         }) : null);
       };
       reader.readAsDataURL(file);
@@ -257,8 +255,7 @@ const Calendar: React.FC = () => {
           items: activeItems,
           value: Number(editingJob.value?.toFixed(2)),
           photoUrl: editingJob.photoUrl,
-          pdfUrl: editingJob.pdfUrl,
-          pdfName: editingJob.pdfName
+          pdfUrl: editingJob.pdfUrl
       });
     } else if (selectedSlot) {
       const newJob: Job = {
@@ -276,8 +273,7 @@ const Calendar: React.FC = () => {
         notes: '',
         items: activeItems,
         photoUrl: editingJob.photoUrl,
-        pdfUrl: editingJob.pdfUrl,
-        pdfName: editingJob.pdfName
+        pdfUrl: editingJob.pdfUrl
       };
       addJob(newJob);
     }
@@ -490,7 +486,7 @@ const Calendar: React.FC = () => {
                       <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded-md flex items-center justify-between">
                          <div className="flex items-center gap-2 overflow-hidden">
                             <FileText size={20} className="text-blue-600 shrink-0" />
-                            <span className="text-xs text-blue-800 font-medium truncate">{editingJob.pdfName || 'anexo.pdf'}</span>
+                            <span className="text-xs text-blue-800 font-medium truncate">anexo.pdf</span>
                          </div>
                          <div className="flex items-center gap-1">
                             <a href={editingJob.pdfUrl} target="_blank" rel="noopener noreferrer" className="p-1 text-blue-600 hover:bg-blue-100 rounded">
@@ -498,7 +494,7 @@ const Calendar: React.FC = () => {
                             </a>
                             <button 
                               type="button"
-                              onClick={() => setEditingJob({...editingJob, pdfUrl: '', pdfName: ''})}
+                              onClick={() => setEditingJob({...editingJob, pdfUrl: ''})}
                               className="p-1 text-red-600 hover:bg-red-50 rounded"
                             >
                                <Trash2 size={16} />

@@ -104,41 +104,54 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             });
           }
 
+          // PostgreSQL/Supabase podem retornar colunas em minúsculas (ordernumber, clientname)
+          const col = (row: any, key: string) => row[key] ?? row[key.toLowerCase()];
           const mapped = jobsData.map((r: any) => {
             let items: JobItem[] | undefined = undefined;
-            if (r.qtd_serviços) {
+            const qtdServicos = r.qtd_servicos;
+            if (qtdServicos && Array.isArray(qtdServicos)) {
               items = [];
-              r.qtd_serviços.forEach((q: any) => {
-                const service = servicesMap.get(q.item);
-                if (service && q.qtd > 0) {
+              qtdServicos.forEach((q: any) => {
+                const name = q.item ?? q.name ?? '';
+                const qtd = Number(q.qtd ?? q.quantity ?? 0);
+                const service = servicesMap.get(name);
+                const pricePerUnit = q.pricePerUnit != null ? Number(q.pricePerUnit) : (service?.defaultPrice ?? 0);
+                const total = q.total != null ? Number(q.total) : qtd * pricePerUnit;
+                if (name && (qtd > 0 || total > 0)) {
                   items.push({
-                    name: service.name,
-                    quantity: q.qtd,
-                    pricePerUnit: service.defaultPrice,
-                    total: q.qtd * service.defaultPrice
+                    name,
+                    quantity: qtd,
+                    pricePerUnit,
+                    total
                   });
                 }
               });
             }
+            // Se o banco retornar items (jsonb) completo, usar
+            if (r.items && Array.isArray(r.items) && r.items.length > 0) {
+              items = r.items.map((i: any) => ({
+                name: i.name || '',
+                quantity: Number(i.quantity) || 0,
+                pricePerUnit: Number(i.pricePerUnit) || 0,
+                total: Number(i.total) || 0
+              }));
+            }
 
             return {
               id: r.id,
-              cityId: r.cityId ? Number(r.cityId) : 1,
-              orderNumber: r.orderNumber || '',
-              clientName: r.clientName || '',
-              address: r.address || '',
-              date: r.date ? new Date(r.date).toISOString() : new Date().toISOString(),
-              description: r.description || '',
-              value: r.value !== undefined ? Number(r.value) : 0,
-              status: (r.status as JobStatus) || JobStatus.SCHEDULED,
-              paymentStatus: (r.paymentStatus as PaymentStatus) || PaymentStatus.PENDING,
-              installerId: r.installerId || '',
+              cityId: col(r, 'cityId') != null ? Number(col(r, 'cityId')) : 1,
+              orderNumber: col(r, 'orderNumber') || '',
+              clientName: col(r, 'clientName') || '',
+              address: col(r, 'address') || '',
+              date: col(r, 'date') ? new Date(col(r, 'date')).toISOString() : new Date().toISOString(),
+              description: col(r, 'description') || '',
+              value: col(r, 'value') !== undefined && col(r, 'value') !== null ? Number(col(r, 'value')) : 0,
+              status: (col(r, 'status') as JobStatus) || JobStatus.SCHEDULED,
+              paymentStatus: (col(r, 'paymentStatus') as PaymentStatus) || PaymentStatus.PENDING,
+              installerId: col(r, 'installerId') || '',
               items: items,
-              qtd_serviços: r.qtd_serviços || undefined,
-              photoUrl: r.photoUrl || undefined,
-              pdfUrl: r.pdfUrl || undefined,
-              pdfName: r.pdfName || undefined,
-              notes: r.notes || undefined
+              qtd_servicos: qtdServicos || undefined,
+              notes: col(r, 'notes') || undefined
             } as Job;
           });
           setAllJobs(mapped);
@@ -202,53 +215,74 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const logout = () => setUser(null);
 
+  // Mapeia status/pagamento (pt-BR) para valores do banco
+  const mapStatusToDb = (s: any) => {
+    switch (s) {
+      case JobStatus.IN_PROGRESS: return 'IN_PROGRESS';
+      case JobStatus.FINISHED: return 'FINISHED';
+      case JobStatus.CANCELLED: return 'CANCELLED';
+      default: return 'SCHEDULED';
+    }
+  };
+  const mapPaymentToDb = (p: any) => {
+    switch (p) {
+      case PaymentStatus.PAID: return 'PAID';
+      case PaymentStatus.LATE: return 'LATE';
+      default: return 'PENDING';
+    }
+  };
+
+  // Payload para a tabela jobs no Supabase (apenas colunas que existem na tabela)
+  const buildJobPayload = (job: Job) => {
+    const qtd_servicos =
+      job.items && job.items.length > 0
+        ? job.items
+            .filter(i => (i.quantity ?? 0) > 0 || (i.pricePerUnit ?? 0) > 0)
+            .map(i => ({
+              item: String(i.name ?? ''),
+              qtd: Number(i.quantity) || 0,
+              pricePerUnit: Number(i.pricePerUnit) || 0,
+              total: Number(i.total) || 0
+            }))
+        : [];
+    const payload: Record<string, unknown> = {
+      id: job.id,
+      cityId: job.cityId,
+      orderNumber: job.orderNumber ?? '',
+      clientName: job.clientName,
+      address: job.address ?? '',
+      date: job.date,
+      description: job.description ?? '',
+      value: Number(job.value ?? 0),
+      status: mapStatusToDb(job.status),
+      paymentStatus: mapPaymentToDb(job.paymentStatus),
+      installerId: job.installerId,
+      qtd_servicos: qtd_servicos.length > 0 ? qtd_servicos : null,
+      notes: job.notes ?? null
+    };
+    delete payload.pdfName;
+    delete payload.pdfUrl;
+    delete payload.photoUrl; // coluna não existe na tabela jobs
+    return payload;
+  };
+
   // CRUD Helpers com injeção de CityId
   const addJob = (job: Job) => {
     if (!user) return;
     const toInsert = { ...job, cityId: user.cityId };
-    // Tenta persistir no Supabase, se falhar usa o local
     (async () => {
       try {
-        const payload = { ...toInsert } as any;
-        // keep cityId and installerId as-is (do not modify)
-        // Map localized enums (pt-BR) para os valores textuais usados no banco
-        const mapStatusToDb = (s: any) => {
-          switch (s) {
-            case JobStatus.IN_PROGRESS: return 'IN_PROGRESS';
-            case JobStatus.FINISHED: return 'FINISHED';
-            case JobStatus.CANCELLED: return 'CANCELLED';
-            default: return 'SCHEDULED';
-          }
-        };
-        const mapPaymentToDb = (p: any) => {
-          switch (p) {
-            case PaymentStatus.PAID: return 'PAID';
-            case PaymentStatus.LATE: return 'LATE';
-            default: return 'PENDING';
-          }
-        };
-        if (payload.status !== undefined) payload.status = mapStatusToDb(payload.status);
-        if (payload.paymentStatus !== undefined) {
-          payload.paymentStatus = mapPaymentToDb(payload.paymentStatus);
-        }
-        // Cria o campo qtd_serviços a partir dos items para persistência no banco
-        if (toInsert.items) {
-          payload.qtd_serviços = toInsert.items.filter(i => i.quantity > 0).map(i => ({item: i.name, qtd: i.quantity}));
-        }
-        // Remover apenas campos que realmente não existem na tabela jobs
-        // (items é mantido para permitir armazenar o JSON completo no banco)
+        const payload = buildJobPayload(toInsert);
         const { data, error } = await supabase.from('jobs').insert([payload]).select().single();
         if (error) {
-          console.warn('Supabase insert job failed', error);
+          console.error('Supabase insert job failed:', error.message, error.details);
           setAllJobs(prev => [{ ...toInsert }, ...prev]);
         } else {
-          // Garante que o estado local continue usando o formato Job da aplicação
-          // (com enums em pt-BR e a estrutura completa de items)
           const inserted = data as any;
           setAllJobs(prev => [{ ...toInsert, id: inserted?.id ?? toInsert.id }, ...prev]);
         }
       } catch (e) {
-        console.warn(e);
+        console.error('addJob exception', e);
         setAllJobs(prev => [{ ...toInsert }, ...prev]);
       }
     })();
@@ -257,42 +291,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const updateJob = (updatedJob: Job) => {
     (async () => {
       try {
-        const payload = { ...updatedJob } as any;
-        // keep cityId and installerId as-is (do not modify)
-        // Map localized enums to DB enum values
-        const mapStatusToDb = (s: any) => {
-          switch (s) {
-            case JobStatus.IN_PROGRESS: return 'IN_PROGRESS';
-            case JobStatus.FINISHED: return 'FINISHED';
-            case JobStatus.CANCELLED: return 'CANCELLED';
-            default: return 'SCHEDULED';
-          }
-        };
-        const mapPaymentToDb = (p: any) => {
-          switch (p) {
-            case PaymentStatus.PAID: return 'PAID';
-            case PaymentStatus.LATE: return 'LATE';
-            default: return 'PENDING';
-          }
-        };
-        if (payload.status !== undefined) payload.status = mapStatusToDb(payload.status);
-        if (payload.paymentStatus !== undefined) {
-          payload.paymentStatus = mapPaymentToDb(payload.paymentStatus);
-        }
-        // Create qtd_serviços from items
-        if (updatedJob.items) {
-          payload.qtd_serviços = updatedJob.items.filter(i => i.quantity > 0).map(i => ({item: i.name, qtd: i.quantity}));
-        }
-        // remover campos que não existem na tabela jobs
-        delete payload.items;
-        delete payload.photoUrl;
-        delete payload.notes;
+        const payload = buildJobPayload(updatedJob);
         const { data, error } = await supabase.from('jobs').update(payload).eq('id', updatedJob.id).select().single();
         if (error) {
           console.warn('Supabase update job failed', error);
           setAllJobs(prev => prev.map(j => j.id === updatedJob.id ? updatedJob : j));
         } else {
-          setAllJobs(prev => prev.map(j => j.id === (data as any).id ? (data as Job) : j));
+          setAllJobs(prev => prev.map(j => j.id === updatedJob.id ? { ...updatedJob } : j));
         }
       } catch (e) {
         console.warn(e);

@@ -23,7 +23,15 @@ Follow these steps to create the Supabase project, create tables and connect the
    FOR SELECT
    USING (true);
 
-   Repeat or adapt for `installers`, `services`, and `jobs` as needed.
+   Para a tabela `jobs` funcionar (criar/editar obras), crie políticas de SELECT, INSERT, UPDATE e DELETE (desenvolvimento):
+
+   -- Jobs: permitir leitura e escrita para anon (apenas desenvolvimento)
+   CREATE POLICY "anon_select_jobs" ON public.jobs FOR SELECT USING (true);
+   CREATE POLICY "anon_insert_jobs" ON public.jobs FOR INSERT WITH CHECK (true);
+   CREATE POLICY "anon_update_jobs" ON public.jobs FOR UPDATE USING (true);
+   CREATE POLICY "anon_delete_jobs" ON public.jobs FOR DELETE USING (true);
+
+   Repeat or adapt for `installers` and `services` as needed.
 
 4) Add environment variables
    - Create a file named `.env` in the project root (do not commit it).

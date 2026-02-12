@@ -21,8 +21,7 @@ const Jobs: React.FC = () => {
     date: new Date().toISOString().slice(0, 16),
     value: 0,
     photoUrl: '',
-    pdfUrl: '',
-    pdfName: ''
+    pdfUrl: ''
   };
 
   const initializeItems = () => {
@@ -47,10 +46,10 @@ const Jobs: React.FC = () => {
       date: new Date(job.date).toISOString().slice(0, 16)
     });
     
-    // Parse qtd_serviços or items to set quantities
+    // Parse qtd_servicos or items to set quantities
     const qtyMap = new Map<string, number>();
-    if (job.qtd_serviços) {
-      job.qtd_serviços.forEach((q: any) => {
+    if (job.qtd_servicos) {
+      job.qtd_servicos.forEach((q: any) => {
         qtyMap.set(q.item, q.qtd);
       });
     } else if (job.items) {
@@ -127,8 +126,7 @@ const Jobs: React.FC = () => {
       reader.onloadend = () => {
         setCurrentJob(prev => ({ 
           ...prev, 
-          pdfUrl: reader.result as string,
-          pdfName: file.name
+          pdfUrl: reader.result as string
         }));
       };
       reader.readAsDataURL(file);
@@ -159,8 +157,7 @@ const Jobs: React.FC = () => {
         notes: currentJob.notes || '',
         items: activeItems,
         photoUrl: currentJob.photoUrl,
-        pdfUrl: currentJob.pdfUrl,
-        pdfName: currentJob.pdfName
+        pdfUrl: currentJob.pdfUrl
     };
 
     if (isEditing) {
@@ -396,7 +393,7 @@ const Jobs: React.FC = () => {
                       <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded-md flex items-center justify-between">
                          <div className="flex items-center gap-2 overflow-hidden">
                             <FileText size={20} className="text-blue-600 shrink-0" />
-                            <span className="text-xs text-blue-800 font-medium truncate">{currentJob.pdfName || 'documento.pdf'}</span>
+                            <span className="text-xs text-blue-800 font-medium truncate">documento.pdf</span>
                          </div>
                          <div className="flex items-center gap-1">
                             <a href={currentJob.pdfUrl} target="_blank" rel="noopener noreferrer" className="p-1 text-blue-600 hover:bg-blue-100 rounded" title="Visualizar">
@@ -404,7 +401,7 @@ const Jobs: React.FC = () => {
                             </a>
                             <button 
                               type="button"
-                              onClick={() => setCurrentJob({...currentJob, pdfUrl: '', pdfName: ''})}
+                              onClick={() => setCurrentJob({...currentJob, pdfUrl: ''})}
                               className="p-1 text-red-600 hover:bg-red-50 rounded"
                               title="Remover"
                             >

@@ -48,10 +48,9 @@ CREATE TABLE IF NOT EXISTS jobs (
   installerId TEXT REFERENCES installers(id) ON DELETE SET NULL,
   notes TEXT,
   items jsonb,
-  qtd_serviços jsonb,
+  qtd_servicos jsonb,
   photoUrl TEXT,
   pdfUrl TEXT,
-  pdfName TEXT,
   created_at timestamptz DEFAULT now()
 );
 
@@ -76,7 +75,7 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- Example job (items stored as jsonb)
-INSERT INTO jobs (id, cityId, orderNumber, clientName, address, date, description, value, status, paymentStatus, installerId, notes, items, qtd_serviços, photoUrl, pdfUrl, pdfName)
+INSERT INTO jobs (id, cityId, orderNumber, clientName, address, date, description, value, status, paymentStatus, installerId, notes, qtd_servicos)
 VALUES (
   'job-1',
   1,
@@ -90,10 +89,6 @@ VALUES (
   'PENDING',
   'inst-1',
   'Observações de teste',
-  '[{"name":"Instalação de painéis","quantity":1,"pricePerUnit":1500.00,"total":1500.00}]'::jsonb,
-  '[{"item":"Instalação de painéis","qtd":1}]'::jsonb,
-  '',
-  '',
-  ''
+  '[{"item":"Instalação de painéis","qtd":1,"pricePerUnit":1500,"total":1500}]'::jsonb
 )
 ON CONFLICT (id) DO NOTHING;

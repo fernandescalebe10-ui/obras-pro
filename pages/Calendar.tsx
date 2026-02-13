@@ -101,21 +101,22 @@ const Calendar: React.FC = () => {
     }
   };
 
-  // Cores dos cards no calendário de acordo com o status / pagamento
+  // Cores dos cards no calendário por status do agendamento (status tem prioridade sobre pagamento)
   const getJobColorClass = (job: Job) => {
+    const status = String(job.status ?? '').toUpperCase();
+    const isFinished = job.status === JobStatus.FINISHED || status === 'FINALIZADA' || status === 'FINISHED';
+    const isCancelled = job.status === JobStatus.CANCELLED || status === 'CANCELADA' || status === 'CANCELLED';
+    const isScheduled = job.status === JobStatus.SCHEDULED || status === 'AGENDADA' || status === 'SCHEDULED';
+    const isPendingPayment = job.paymentStatus === PaymentStatus.PENDING || String(job.paymentStatus ?? '').toUpperCase() === 'PENDING' || String(job.paymentStatus ?? '').toUpperCase() === 'PENDENTE';
     // Finalizadas: verde
-    if (job.status === JobStatus.FINISHED) {
-      return 'bg-green-100/80 border-green-400 text-green-900';
-    }
+    if (isFinished) return 'bg-green-100/80 border-green-400 text-green-900';
     // Canceladas: vermelho
-    if (job.status === JobStatus.CANCELLED) {
-      return 'bg-red-100/80 border-red-400 text-red-900';
-    }
-    // Pagamento pendente: amarelo
-    if (job.paymentStatus === PaymentStatus.PENDING) {
-      return 'bg-yellow-100/80 border-yellow-400 text-yellow-900';
-    }
-    // Demais (agendada / andamento e não pendente): azul suave
+    if (isCancelled) return 'bg-red-100/80 border-red-400 text-red-900';
+    // Agendada: sempre azul (mesmo com pagamento pendente)
+    if (isScheduled) return 'bg-blue-100/70 border-blue-300 text-blue-900';
+    // Em andamento com pagamento pendente: amarelo
+    if (isPendingPayment) return 'bg-yellow-100/80 border-yellow-400 text-yellow-900';
+    // Em andamento pago / demais: azul
     return 'bg-blue-100/70 border-blue-300 text-blue-900';
   };
 

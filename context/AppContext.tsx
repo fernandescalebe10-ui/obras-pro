@@ -179,8 +179,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               date: col(r, 'date') ? new Date(col(r, 'date')).toISOString() : new Date().toISOString(),
               description: col(r, 'description') || '',
               value: col(r, 'value') !== undefined && col(r, 'value') !== null ? Number(col(r, 'value')) : 0,
-              status: (col(r, 'status') as JobStatus) || JobStatus.SCHEDULED,
-              paymentStatus: (col(r, 'paymentStatus') as PaymentStatus) || PaymentStatus.PENDING,
+              status: mapStatusFromDb(col(r, 'status')),
+              paymentStatus: mapPaymentFromDb(col(r, 'paymentStatus')),
               installerId: col(r, 'installerId') || '',
               items: items,
               qtd_servicos: qtdServicosFinal || undefined,
@@ -248,6 +248,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const logout = () => setUser(null);
 
+  // Mapeia valores do banco (inglês) para enum (pt-BR) – para cores e comparações no Calendário
+  const mapStatusFromDb = (v: any): JobStatus => {
+    const s = String(v || '').toUpperCase();
+    if (s === 'IN_PROGRESS') return JobStatus.IN_PROGRESS;
+    if (s === 'FINISHED') return JobStatus.FINISHED;
+    if (s === 'CANCELLED') return JobStatus.CANCELLED;
+    return JobStatus.SCHEDULED;
+  };
+  const mapPaymentFromDb = (v: any): PaymentStatus => {
+    const p = String(v || '').toUpperCase();
+    if (p === 'PAID') return PaymentStatus.PAID;
+    if (p === 'LATE') return PaymentStatus.LATE;
+    return PaymentStatus.PENDING;
+  };
+
   // Mapeia status/pagamento (pt-BR) para valores do banco
   const mapStatusToDb = (s: any) => {
     switch (s) {
@@ -313,8 +328,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       date: col(r, 'date') ? new Date(col(r, 'date')).toISOString() : new Date().toISOString(),
       description: col(r, 'description') || '',
       value: col(r, 'value') !== undefined && col(r, 'value') !== null ? Number(col(r, 'value')) : 0,
-      status: (col(r, 'status') as JobStatus) || JobStatus.SCHEDULED,
-      paymentStatus: (col(r, 'paymentStatus') as PaymentStatus) || PaymentStatus.PENDING,
+      status: mapStatusFromDb(col(r, 'status')),
+      paymentStatus: mapPaymentFromDb(col(r, 'paymentStatus')),
       installerId: col(r, 'installerId') || '',
       items,
       qtd_servicos: qtdServicosFinal || undefined,

@@ -258,22 +258,26 @@ const Financial: React.FC = () => {
                       {getInstallerName(job.installerId)}
                     </td>
                   )}
-                  {/* Service Details Column - usa items ou qtd_servicos para PDF/relatório */}
+                  {/* Detalhes Serviços: dados da coluna qtd_servicos do banco (Jobs) */}
                   <td className="px-6 py-4 text-xs text-gray-600 align-top">
                      {(() => {
-                       const displayItems = job.items && job.items.length > 0
-                         ? job.items
-                         : (Array.isArray(job.qtd_servicos) ? job.qtd_servicos : (job.qtd_servicos && typeof job.qtd_servicos === 'object' ? Object.values(job.qtd_servicos) : [])).map((q: any) => ({
-                           name: q?.item ?? q?.name ?? '',
-                           quantity: Number(q?.qtd ?? q?.quantity ?? 0) || 0,
-                           pricePerUnit: Number(q?.pricePerUnit ?? 0) || 0,
-                           total: Number(q?.total ?? 0) || 0
-                         })).filter((i: { name: string; quantity: number }) => i.name && i.quantity > 0);
+                       let raw = job.qtd_servicos;
+                       if (typeof raw === 'string') {
+                         try { raw = JSON.parse(raw); } catch { raw = null; }
+                       }
+                       const qtdArray = raw == null ? [] : Array.isArray(raw) ? raw : (typeof raw === 'object' ? Object.values(raw) : []);
+                       const fromQtdServicos = qtdArray.map((q: any) => ({
+                         name: String(q?.item ?? q?.name ?? '').trim(),
+                         quantity: Number(q?.qtd ?? q?.quantity ?? 0) || 0,
+                         pricePerUnit: Number(q?.pricePerUnit ?? 0) || 0,
+                         total: Number(q?.total ?? 0) || 0
+                       })).filter((i: { name: string; quantity: number; total?: number }) => i.name && (i.quantity > 0 || (i.total ?? 0) > 0));
+                       const displayItems = fromQtdServicos.length > 0 ? fromQtdServicos : (job.items && job.items.length > 0 ? job.items.filter(i => i.quantity > 0 || (i.total ?? 0) > 0) : []);
                        return displayItems.length > 0 ? (
                          <ul className="list-disc pl-4 space-y-1">
-                           {displayItems.map((item: { name: string; quantity: number; pricePerUnit: number; total: number }, idx: number) => (
+                           {displayItems.map((item: { name: string; quantity: number; pricePerUnit?: number; total?: number }, idx: number) => (
                              <li key={idx}>
-                               {`${item.quantity} ${item.name} x R$ ${(item.pricePerUnit || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} = R$ ${(item.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                               {`${item.quantity} ${item.name} x R$ ${(item.pricePerUnit ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} = R$ ${(item.total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                              </li>
                            ))}
                          </ul>

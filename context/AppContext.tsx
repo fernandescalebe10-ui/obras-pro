@@ -86,7 +86,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           setAllServices(mapped);
         }
 
-        // Jobs
+        // Jobs – select('*') retorna só colunas que existem no banco (evita erro se items não existir)
         const { data: jobsData, error: jobsError } = await supabase.from('jobs').select('*');
         if (jobsError) console.warn('Supabase jobs error', jobsError);
         if (jobsData) {
@@ -114,8 +114,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           };
           const mapped = jobsData.map((r: any) => {
             let items: JobItem[] | undefined = undefined;
-            // Garantir que qtd_servicos seja sempre array (Supabase/JSON pode retornar objeto)
-            const qtdServicosRaw = col(r, 'qtd_servicos');
+            // Buscar qtd_servicos da coluna do banco (pode vir como array, objeto ou string JSON)
+            let qtdServicosRaw = col(r, 'qtd_servicos');
+            if (typeof qtdServicosRaw === 'string') {
+              try {
+                qtdServicosRaw = JSON.parse(qtdServicosRaw as string);
+              } catch {
+                qtdServicosRaw = null;
+              }
+            }
             const qtdServicos = qtdServicosRaw == null
               ? undefined
               : Array.isArray(qtdServicosRaw)

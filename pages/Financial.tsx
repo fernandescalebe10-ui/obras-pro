@@ -61,25 +61,55 @@ const Financial: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* CSS for Printing */}
+      {/* CSS for impressão/PDF – múltiplas páginas e conteúdo completo */}
       <style>{`
         @media print {
+          @page {
+            size: A4;
+            margin: 12mm 15mm;
+          }
+          html, body {
+            height: auto !important;
+            min-height: auto !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+          }
+          /* Layout (root/main) não pode limitar altura na impressão */
+          #root, #root > *, main {
+            overflow: visible !important;
+            height: auto !important;
+            min-height: auto !important;
+            max-height: none !important;
+          }
           .no-print { display: none !important; }
           .print-only { display: block !important; }
-          body { background-color: white; }
-          
-          /* Ensures tables break correctly across pages */
-          table { page-break-inside: auto; }
-          tr { page-break-inside: avoid; page-break-after: auto; }
-          thead { display: table-header-group; }
-          tfoot { display: table-footer-group; }
-          
-          /* Container adjustments */
+          body { background-color: white !important; }
+
+          /* Container do relatório: não cortar, permitir quebra de página */
+          .print-report-wrapper {
+            overflow: visible !important;
+            height: auto !important;
+            max-height: none !important;
+            page-break-inside: auto;
+          }
           .overflow-hidden { overflow: visible !important; }
           .shadow { box-shadow: none !important; }
           .border { border: 1px solid #ddd !important; }
-          
-          /* Ensure backgrounds print */
+
+          /* Tabela: pode quebrar entre páginas; cabeçalho repete */
+          table { page-break-inside: auto; }
+          thead { display: table-header-group; }
+          thead tr th { background: #f9fafb !important; }
+          tfoot { display: table-footer-group; }
+          tr { page-break-inside: avoid; page-break-after: auto; }
+          td, th { page-break-inside: avoid; }
+
+          /* Evitar que uma linha fique cortada no meio */
+          tbody tr { page-break-inside: avoid; }
+
+          /* Cores na impressão */
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
       `}</style>
@@ -224,8 +254,8 @@ const Financial: React.FC = () => {
         </div>
       )}
 
-      {/* Main Table */}
-      <div className="bg-white shadow overflow-hidden rounded-lg border border-gray-200">
+      {/* Main Table – print-report-wrapper permite quebra em múltiplas páginas no PDF */}
+      <div className="print-report-wrapper bg-white shadow overflow-hidden rounded-lg border border-gray-200">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>

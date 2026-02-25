@@ -291,7 +291,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     const servicesMap = new Map(servicesList.map(s => [s.name, s]));
     let items: JobItem[] | undefined;
-    const qtdServicosRaw = col(r, 'qtd_servicos');
+    let qtdServicosRaw = col(r, 'qtd_servicos');
+    if (typeof qtdServicosRaw === 'string') {
+      try { qtdServicosRaw = JSON.parse(qtdServicosRaw); } catch { qtdServicosRaw = null; }
+    }
     const qtdServicos = qtdServicosRaw == null ? undefined
       : Array.isArray(qtdServicosRaw) ? qtdServicosRaw
       : typeof qtdServicosRaw === 'object' ? Object.values(qtdServicosRaw) : [];
@@ -401,11 +404,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           setAllJobs(prev => [jobWithQtdServicos({ ...toInsert }), ...prev]);
         } else {
           const fromDb = mapRowToJob(data, allServices);
+          const hasItemsFromDb = (fromDb.qtd_servicos?.length ?? 0) > 0 || (fromDb.items?.length ?? 0) > 0;
           const saved: Job = {
             ...fromDb,
             id: (data as any)?.id ?? toInsert.id,
             photoUrl: toInsert.photoUrl,
-            pdfUrl: toInsert.pdfUrl
+            pdfUrl: toInsert.pdfUrl,
+            items: hasItemsFromDb ? fromDb.items : (toInsert.items ?? fromDb.items),
+            qtd_servicos: hasItemsFromDb ? fromDb.qtd_servicos : (toInsert.items?.length ? toInsert.items.map(i => ({ item: i.name, qtd: i.quantity, pricePerUnit: i.pricePerUnit, total: i.total })) : fromDb.qtd_servicos)
           };
           setAllJobs(prev => [jobWithQtdServicos(saved), ...prev]);
         }
@@ -426,10 +432,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           setAllJobs(prev => prev.map(j => j.id === updatedJob.id ? jobWithQtdServicos(updatedJob) : j));
         } else {
           const fromDb = mapRowToJob(data, allServices);
+          const hasItemsFromDb = (fromDb.qtd_servicos?.length ?? 0) > 0 || (fromDb.items?.length ?? 0) > 0;
           const merged: Job = {
             ...fromDb,
             photoUrl: updatedJob.photoUrl,
-            pdfUrl: updatedJob.pdfUrl
+            pdfUrl: updatedJob.pdfUrl,
+            items: hasItemsFromDb ? fromDb.items : (updatedJob.items ?? fromDb.items),
+            qtd_servicos: hasItemsFromDb ? fromDb.qtd_servicos : (updatedJob.items?.length ? updatedJob.items.map(i => ({ item: i.name, qtd: i.quantity, pricePerUnit: i.pricePerUnit, total: i.total })) : fromDb.qtd_servicos)
           };
           setAllJobs(prev => prev.map(j => j.id === updatedJob.id ? jobWithQtdServicos(merged) : j));
         }
